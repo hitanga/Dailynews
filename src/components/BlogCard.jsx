@@ -44,6 +44,13 @@ export default function BlogCard({ blog }) {
           />
         </Link>
 
+        {/* Fun Fact Badge (top left) */}
+        {categoryText.toLowerCase().includes("fun fact") && (
+          <div className="absolute top-2.5 left-2.5 bg-amber-500 text-white font-extrabold text-[9px] tracking-wider uppercase px-2 py-0.5 rounded shadow-xs">
+            💡 Fun Fact
+          </div>
+        )}
+
         {/* Camera Badge (top right) */}
         {blog.hasCameraBadge && (
           <div className="absolute top-0 right-0 bg-[#f84560] text-white p-2">

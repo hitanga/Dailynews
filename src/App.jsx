@@ -27,6 +27,8 @@ export default function App() {
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Home />} />
+              <Route path="/news" element={<Home />} />
+              <Route path="/fun-facts" element={<Home />} />
               <Route path="/blog/:id" element={<BlogDetails />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />

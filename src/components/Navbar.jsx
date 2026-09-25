@@ -124,7 +124,7 @@ export default function Navbar({ onSearch }) {
               <Link
                 to="/"
                 className={`transition-colors ${
-                  location.pathname === "/" && !location.search.includes("category=news")
+                  location.pathname === "/" && !location.search
                     ? "text-[#f84560]"
                     : "hover:text-[#f84560]"
                 }`}
@@ -136,9 +136,9 @@ export default function Navbar({ onSearch }) {
             {/* 2. NEWS */}
             <li>
               <Link
-                to="/?category=news"
+                to="/news"
                 className={`transition-colors ${
-                  location.search.includes("category=news")
+                  location.pathname === "/news" || location.search.includes("category=news")
                     ? "text-[#f84560]"
                     : "hover:text-[#f84560]"
                 }`}
@@ -150,9 +150,9 @@ export default function Navbar({ onSearch }) {
             {/* 3. FUN FACTS */}
             <li>
               <Link
-                to="/?category=fun facts"
+                to="/fun-facts"
                 className={`transition-colors ${
-                  location.search.includes("category=fun")
+                  location.pathname === "/fun-facts" || location.search.includes("category=fun")
                     ? "text-[#f84560]"
                     : "hover:text-[#f84560]"
                 }`}
