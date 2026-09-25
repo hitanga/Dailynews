@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { DEFAULT_POSTS } from "../utils/seedData";
 import { formatDate } from "../components/BlogCard";
-import { formatContentToHtml } from "../utils/contentFormatter";
+import { formatContentToHtml, stripHtml } from "../utils/contentFormatter";
+import { updatePageSeo, resetPageSeo } from "../utils/seoHelper";
+import { Tag } from "lucide-react";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
 
 export default function BlogDetails() {
@@ -20,72 +22,85 @@ export default function BlogDetails() {
       setError("");
 
       try {
-        // 1. First check local storage custom blogs
+        let loadedBlog = null;
+
+        // 1. Check local storage custom blogs (by id or slug)
         try {
           const localPosts = JSON.parse(
             localStorage.getItem("daily_news_custom_blogs") || "[]"
           );
-          const localMatch = localPosts.find((p) => p.id === id);
+          const localMatch = localPosts.find(
+            (p) => p.id === id || p.slug === id
+          );
           if (localMatch) {
-            setBlog(localMatch);
-            setImgSrc(
-              !localMatch.imageUrl || localMatch.imageUrl.includes("photo-1477959858617-67f30bc75b82")
-                ? heroCityStreetImg
-                : localMatch.imageUrl
-            );
-            setLoading(false);
-            return;
+            loadedBlog = localMatch;
           }
         } catch (e) {}
 
-        // 2. Check Firestore
-        try {
-          const blogRef = doc(db, "blogs", id);
-          const docSnap = await getDoc(blogRef);
+        // 2. Check Firestore (by document ID, then by slug field)
+        if (!loadedBlog) {
+          try {
+            const blogRef = doc(db, "blogs", id);
+            const docSnap = await getDoc(blogRef);
 
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            const loadedBlog = { id: docSnap.id, ...data };
-            setBlog(loadedBlog);
-            setImgSrc(
-              !loadedBlog.imageUrl || loadedBlog.imageUrl.includes("photo-1477959858617-67f30bc75b82")
-                ? heroCityStreetImg
-                : loadedBlog.imageUrl
-            );
-            setLoading(false);
-            return;
+            if (docSnap.exists()) {
+              loadedBlog = { id: docSnap.id, ...docSnap.data() };
+            } else {
+              // Try querying by slug field in Firestore
+              const q = query(collection(db, "blogs"), where("slug", "==", id));
+              const querySnap = await getDocs(q);
+              if (!querySnap.empty) {
+                const firstDoc = querySnap.docs[0];
+                loadedBlog = { id: firstDoc.id, ...firstDoc.data() };
+              }
+            }
+          } catch (firestoreErr) {
+            console.warn("Firestore fetch error:", firestoreErr);
           }
-        } catch (firestoreErr) {
-          console.warn("Firestore fetch error:", firestoreErr);
         }
 
         // 3. Fallback to default sample posts
-        const defaultMatch = DEFAULT_POSTS.find(
-          (p, idx) =>
-            `post-${idx}` === id ||
-            p.title.toLowerCase().includes(id.toLowerCase())
-        );
-
-        if (defaultMatch) {
-          setBlog({ id, ...defaultMatch });
-          setImgSrc(
-            !defaultMatch.imageUrl || defaultMatch.imageUrl.includes("photo-1477959858617-67f30bc75b82")
-              ? heroCityStreetImg
-              : defaultMatch.imageUrl
+        if (!loadedBlog) {
+          const defaultMatch = DEFAULT_POSTS.find(
+            (p, idx) =>
+              `post-${idx}` === id ||
+              p.slug === id ||
+              p.title.toLowerCase().includes(id.toLowerCase())
           );
+          if (defaultMatch) {
+            loadedBlog = { id, ...defaultMatch };
+          }
+        }
+
+        if (loadedBlog) {
+          setBlog(loadedBlog);
+          const finalImage =
+            !loadedBlog.imageUrl ||
+            loadedBlog.imageUrl.includes("photo-1477959858617-67f30bc75b82")
+              ? heroCityStreetImg
+              : loadedBlog.imageUrl;
+          setImgSrc(finalImage);
+
+          // Update Hidden SEO Metadata (HTML <head> only, hidden from page body)
+          updatePageSeo({
+            title: loadedBlog.title,
+            seoTitle: loadedBlog.seoTitle,
+            description: stripHtml(loadedBlog.description),
+            metaDescription: loadedBlog.metaDescription,
+            imageUrl: finalImage,
+            slug: loadedBlog.slug,
+            tags: loadedBlog.tags,
+            category: loadedBlog.category,
+            datePublished: loadedBlog.createdAt?.toDate
+              ? loadedBlog.createdAt.toDate().toISOString()
+              : new Date().toISOString(),
+          });
         } else {
           setError("Story not found.");
         }
       } catch (err) {
         console.warn("Error fetching story details:", err);
-        const defaultMatch =
-          DEFAULT_POSTS.find((p, idx) => `post-${idx}` === id) || DEFAULT_POSTS[0];
-        setBlog({ id, ...defaultMatch });
-        setImgSrc(
-          !defaultMatch.imageUrl || defaultMatch.imageUrl.includes("photo-1477959858617-67f30bc75b82")
-            ? heroCityStreetImg
-            : defaultMatch.imageUrl
-        );
+        setError("Unable to load story.");
       } finally {
         setLoading(false);
       }
@@ -93,6 +108,11 @@ export default function BlogDetails() {
 
     fetchBlog();
     window.scrollTo({ top: 0, behavior: "smooth" });
+
+    // Cleanup SEO tags when leaving this article page
+    return () => {
+      resetPageSeo();
+    };
   }, [id]);
 
   if (loading) {
@@ -126,8 +146,9 @@ export default function BlogDetails() {
   }
 
   const dateText = formatDate(blog.createdAt, blog.dateString);
-  const categoryText = blog.category || "Featured, Lifestyle";
+  const categoryText = blog.category || "Featured";
   const formattedHtml = formatContentToHtml(blog.description);
+  const blogTags = Array.isArray(blog.tags) ? blog.tags : [];
 
   return (
     <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -143,7 +164,7 @@ export default function BlogDetails() {
 
       {/* Category & Meta */}
       <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-gray-900">{categoryText}</span>
+        <span className="text-gray-900 font-bold">{categoryText}</span>
         <span>•</span>
         <span>{dateText}</span>
         <span>•</span>
@@ -153,12 +174,12 @@ export default function BlogDetails() {
       {/* Red Accent Bar */}
       <div className="w-10 h-[2.5px] bg-[#f84560] mb-5" />
 
-      {/* Headline Title */}
+      {/* 1. VISIBLE FRONTEND: Title */}
       <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-extrabold text-gray-900 leading-[1.18] mb-8">
         {blog.title}
       </h1>
 
-      {/* Hero Photograph with Gutenverse Architectural Corner */}
+      {/* 2. VISIBLE FRONTEND: Image */}
       <div className="relative w-full aspect-[16/10] sm:aspect-[21/10] bg-gray-100 overflow-hidden mb-10 border border-gray-100 shadow-xs">
         <img
           src={imgSrc}
@@ -170,11 +191,36 @@ export default function BlogDetails() {
         <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#22252a]" />
       </div>
 
-      {/* Story Content / Editorial Body with Rich Formatting Support */}
+      {/* 3. VISIBLE FRONTEND: Description (Story Body) */}
       <div
         className="article-rendered-content text-gray-800 leading-relaxed text-[16px] sm:text-[18px]"
         dangerouslySetInnerHTML={{ __html: formattedHtml }}
       />
+
+      {/* 4. VISIBLE FRONTEND: Tags (Only Title, Image, Description, and Tags are visible) */}
+      {blogTags.length > 0 && (
+        <div className="mt-12 pt-8 border-t border-gray-200">
+          <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-gray-500 mb-3 flex items-center gap-1.5">
+            <Tag className="w-3.5 h-3.5 text-[#f84560]" />
+            <span>Tags & Topics</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {blogTags.map((tag, idx) => (
+              <Link
+                key={idx}
+                to={`/?q=${encodeURIComponent(tag)}`}
+                className="inline-flex items-center gap-1 bg-gray-100 hover:bg-[#f84560] text-gray-700 hover:text-white text-xs font-semibold px-3 py-1.5 rounded-full transition-colors border border-gray-200 hover:border-[#f84560]"
+                title={`Find more stories tagged #${tag}`}
+              >
+                <span>#{tag}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* NOTE: SEO Title, Slug, and Meta Description are intentionally kept hidden
+          from this article body and only rendered in HTML <head> for search engines */}
     </article>
   );
 }

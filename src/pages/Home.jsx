@@ -89,13 +89,17 @@ export default function Home() {
   // All news stories
   const allNewsStories = blogs.filter((b) => !isFunFact(b));
 
-  // Search filter helper
+  // Search filter helper (searches Title, Description, Tags, and Category)
   const matchesSearch = (blog) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     const matchTitle = blog.title?.toLowerCase().includes(q);
     const matchDesc = blog.description?.toLowerCase().includes(q);
-    return matchTitle || matchDesc;
+    const matchTags = Array.isArray(blog.tags)
+      ? blog.tags.some((t) => (t || "").toLowerCase().includes(q))
+      : false;
+    const matchCategory = (blog.category || "").toLowerCase().includes(q);
+    return matchTitle || matchDesc || matchTags || matchCategory;
   };
 
   // -------------------------------------------------------------

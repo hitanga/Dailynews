@@ -3,6 +3,9 @@ import { useNavigate, Link } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import RichTextEditor from "../components/RichTextEditor";
+import TagsInput from "../components/TagsInput";
+import SeoSettingsPanel from "../components/SeoSettingsPanel";
+import { generateSlug } from "../utils/seoHelper";
 
 export default function CreateBlog() {
   const [title, setTitle] = useState("");
@@ -10,6 +13,13 @@ export default function CreateBlog() {
   const [categoryType, setCategoryType] = useState("News"); // "News" | "Fun Facts"
   const [subTag, setSubTag] = useState("");
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState([]);
+
+  // SEO Fields (Hidden from frontend body, embedded in Google/Social metadata)
+  const [seoTitle, setSeoTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [error, setError] = useState("");
@@ -19,6 +29,14 @@ export default function CreateBlog() {
   const handleImageUrlChange = (e) => {
     setImageUrl(e.target.value);
     setImageError(false);
+  };
+
+  const handleTitleChange = (e) => {
+    const val = e.target.value;
+    setTitle(val);
+    if (!slug) {
+      setSlug(generateSlug(val));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -52,11 +70,18 @@ export default function CreateBlog() {
         ? `${categoryType}, ${subTag.trim()}`
         : categoryType;
 
+      const finalSlug = (slug.trim() || generateSlug(title)).trim();
+
       const newPostData = {
         title: title.trim(),
         imageUrl: imageUrl.trim(),
         category: finalCategory,
         description: description.trim(),
+        tags: tags,
+        // SEO Fields (stored in database and meta tags, hidden on article body)
+        seoTitle: (seoTitle.trim() || title.trim()),
+        slug: finalSlug,
+        metaDescription: metaDescription.trim(),
         dateString: dateString,
         commentsCount: 0,
         isHero: categoryType === "News",
@@ -120,7 +145,7 @@ export default function CreateBlog() {
           Create New Story
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Choose whether this is a News story or a Fun Facts article. It will automatically appear in its designated homepage section!
+          Publish a story with rich formatting, interactive tags, and hidden SEO metadata for Google search indexing.
         </p>
       </div>
 
@@ -200,13 +225,13 @@ export default function CreateBlog() {
             </div>
           </div>
 
-          {/* Optional Sub-tag */}
+          {/* Optional Sub-category or custom topic */}
           <div className="mt-2">
             <input
               type="text"
               value={subTag}
               onChange={(e) => setSubTag(e.target.value)}
-              placeholder="Optional tags (e.g. Science, Tech, Finance, Nature)"
+              placeholder="Topic / Sub-Category (e.g. Amazing Facts, Science, Business, World)"
               className="w-full px-3 py-2 border border-gray-200 rounded text-gray-700 text-xs focus:outline-none focus:border-[#f84560]"
             />
           </div>
@@ -221,14 +246,39 @@ export default function CreateBlog() {
             type="text"
             required
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={handleTitleChange}
             placeholder={
               categoryType === "News"
                 ? "e.g. Breaking: Global Clean Energy Output Hits New Milestone"
-                : "e.g. Did You Know? Honey Never Spoils Even After 3,000 Years"
+                : "e.g. क्या शहद कभी खराब नहीं होता? जानिए इसका Amazing Science Fact"
             }
             className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
           />
+        </div>
+
+        {/* Story Tags Input (Visible on Frontend) */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+              Story Tags (Visible on frontend & searchable)
+            </label>
+            <span className="text-[11px] text-gray-400">
+              Press Enter or Comma to add
+            </span>
+          </div>
+          <TagsInput
+            tags={tags}
+            onChange={setTags}
+            placeholder="e.g. Amazing Facts, Hindi Facts, Science Facts, Honey Facts, रोचक तथ्य..."
+            suggestedTags={
+              categoryType === "Fun Facts"
+                ? ["Amazing Facts", "Science Facts", "Honey Facts", "Hindi Facts", "Nature Trivia", "History Facts"]
+                : ["World News", "Economy", "Markets", "Technology", "Climate", "Breaking"]
+            }
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Tags will be displayed as clickable topic badges at the bottom of your article and make the story instantly searchable.
+          </p>
         </div>
 
         {/* Image URL */}
@@ -271,7 +321,7 @@ export default function CreateBlog() {
           )}
         </div>
 
-        {/* Rich Story Content */}
+        {/* Rich Story Content (Visible on Frontend) */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
             Story Body & Formatting *
@@ -282,6 +332,18 @@ export default function CreateBlog() {
             placeholder="Write your story content here. Use the toolbar above to style bold, italic, underline, font size, colors, lists, and hyperlinks..."
           />
         </div>
+
+        {/* SEO & Search Optimization Details (Hidden from Frontend Body) */}
+        <SeoSettingsPanel
+          seoTitle={seoTitle}
+          setSeoTitle={setSeoTitle}
+          slug={slug}
+          setSlug={setSlug}
+          metaDescription={metaDescription}
+          setMetaDescription={setMetaDescription}
+          fallbackTitle={title}
+          fallbackDescription={description}
+        />
 
         {/* Action Buttons */}
         <div className="flex items-center gap-4 pt-2">

@@ -4,6 +4,9 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { DEFAULT_POSTS } from "../utils/seedData";
 import RichTextEditor from "../components/RichTextEditor";
+import TagsInput from "../components/TagsInput";
+import SeoSettingsPanel from "../components/SeoSettingsPanel";
+import { generateSlug } from "../utils/seoHelper";
 
 export default function EditBlog() {
   const { id } = useParams();
@@ -14,6 +17,12 @@ export default function EditBlog() {
   const [categoryType, setCategoryType] = useState("News"); // "News" | "Fun Facts"
   const [subTag, setSubTag] = useState("");
   const [description, setDescription] = useState("");
+  const [tags, setTags] = useState([]);
+
+  // SEO Fields (Hidden from frontend body, embedded in Google/Social metadata)
+  const [seoTitle, setSeoTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [metaDescription, setMetaDescription] = useState("");
 
   const [initialLoading, setInitialLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,7 +42,7 @@ export default function EditBlog() {
           const localList = JSON.parse(
             localStorage.getItem("daily_news_custom_blogs") || "[]"
           );
-          const found = localList.find((b) => b.id === id);
+          const found = localList.find((b) => b.id === id || b.slug === id);
           if (found) loadedData = found;
         } catch (e) {}
 
@@ -64,6 +73,12 @@ export default function EditBlog() {
           setTitle(loadedData.title || "");
           setImageUrl(loadedData.imageUrl || "");
           setDescription(loadedData.description || "");
+          setTags(Array.isArray(loadedData.tags) ? loadedData.tags : []);
+
+          // SEO Fields
+          setSeoTitle(loadedData.seoTitle || loadedData.title || "");
+          setSlug(loadedData.slug || generateSlug(loadedData.title || ""));
+          setMetaDescription(loadedData.metaDescription || "");
 
           const cat = loadedData.category || "News";
           if (cat.toLowerCase().includes("fun fact")) {
@@ -124,11 +139,18 @@ export default function EditBlog() {
         ? `${categoryType}, ${subTag.trim()}`
         : categoryType;
 
+      const finalSlug = (slug.trim() || generateSlug(title)).trim();
+
       const updatedFields = {
         title: title.trim(),
         imageUrl: imageUrl.trim(),
         category: finalCategory,
         description: description.trim(),
+        tags: tags,
+        // SEO Fields
+        seoTitle: (seoTitle.trim() || title.trim()),
+        slug: finalSlug,
+        metaDescription: metaDescription.trim(),
         updatedAt: serverTimestamp(),
       };
 
@@ -145,7 +167,7 @@ export default function EditBlog() {
         const localList = JSON.parse(
           localStorage.getItem("daily_news_custom_blogs") || "[]"
         );
-        const existingIdx = localList.findIndex((b) => b.id === id);
+        const existingIdx = localList.findIndex((b) => b.id === id || b.slug === id);
 
         const localObj = {
           id,
@@ -153,6 +175,10 @@ export default function EditBlog() {
           imageUrl: imageUrl.trim(),
           category: finalCategory,
           description: description.trim(),
+          tags: tags,
+          seoTitle: (seoTitle.trim() || title.trim()),
+          slug: finalSlug,
+          metaDescription: metaDescription.trim(),
           updatedAt: new Date().toISOString(),
         };
 
@@ -204,7 +230,7 @@ export default function EditBlog() {
           Edit Story
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Modify the category, title, cover photo, font styling, or narrative body.
+          Modify the category, title, tags, cover photo, font styling, or hidden SEO details.
         </p>
       </div>
 
@@ -284,13 +310,13 @@ export default function EditBlog() {
             </div>
           </div>
 
-          {/* Optional Sub-tag */}
+          {/* Optional Sub-category or custom topic */}
           <div className="mt-2">
             <input
               type="text"
               value={subTag}
               onChange={(e) => setSubTag(e.target.value)}
-              placeholder="Optional tags (e.g. Science, Tech, Finance, Nature)"
+              placeholder="Topic / Sub-Category (e.g. Amazing Facts, Science, Business, World)"
               className="w-full px-3 py-2 border border-gray-200 rounded text-gray-700 text-xs focus:outline-none focus:border-[#f84560]"
             />
           </div>
@@ -308,6 +334,31 @@ export default function EditBlog() {
             onChange={(e) => setTitle(e.target.value)}
             className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
           />
+        </div>
+
+        {/* Story Tags Input (Visible on Frontend) */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+              Story Tags (Visible on frontend & searchable)
+            </label>
+            <span className="text-[11px] text-gray-400">
+              Press Enter or Comma to add
+            </span>
+          </div>
+          <TagsInput
+            tags={tags}
+            onChange={setTags}
+            placeholder="e.g. Amazing Facts, Hindi Facts, Science Facts, Honey Facts, रोचक तथ्य..."
+            suggestedTags={
+              categoryType === "Fun Facts"
+                ? ["Amazing Facts", "Science Facts", "Honey Facts", "Hindi Facts", "Nature Trivia", "History Facts"]
+                : ["World News", "Economy", "Markets", "Technology", "Climate", "Breaking"]
+            }
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Tags will be displayed as clickable topic badges at the bottom of your article and make the story instantly searchable.
+          </p>
         </div>
 
         {/* Image URL */}
@@ -349,7 +400,7 @@ export default function EditBlog() {
           )}
         </div>
 
-        {/* Story Body & Rich Text Formatting */}
+        {/* Story Body & Rich Text Formatting (Visible on Frontend) */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
             Story Body & Formatting *
@@ -360,6 +411,18 @@ export default function EditBlog() {
             placeholder="Write your story narrative here. Use the toolbar to style bold, italic, font sizes, colors, and hyperlinks..."
           />
         </div>
+
+        {/* SEO & Search Optimization Details (Hidden from Frontend Body) */}
+        <SeoSettingsPanel
+          seoTitle={seoTitle}
+          setSeoTitle={setSeoTitle}
+          slug={slug}
+          setSlug={setSlug}
+          metaDescription={metaDescription}
+          setMetaDescription={setMetaDescription}
+          fallbackTitle={title}
+          fallbackDescription={description}
+        />
 
         {/* Action Buttons */}
         <div className="flex items-center gap-4 pt-2">
