@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { collection, getDocs, doc, deleteDoc, query, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { formatDate } from "../components/BlogCard";
-import { DEFAULT_POSTS, seedInitialBlogsIfEmpty } from "../utils/seedData";
+import { DEFAULT_POSTS, seedInitialBlogsIfEmpty, combineBlogsConsistently } from "../utils/seedData";
 
 export default function Dashboard() {
   const [blogs, setBlogs] = useState([]);
@@ -19,14 +19,28 @@ export default function Dashboard() {
 
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchBlogs();
-  }, []);
+  }, [location]);
 
   const fetchBlogs = async () => {
     setLoading(true);
     setError("");
+
+    // 1. Load locally cached / created blogs
+    let localCustom = [];
+    try {
+      localCustom = JSON.parse(
+        localStorage.getItem("daily_news_custom_blogs") || "[]"
+      );
+    } catch (e) {
+      localCustom = [];
+    }
+
+    // 2. Fetch live Firestore documents
+    let firestoreDocs = [];
     try {
       const blogsRef = collection(db, "blogs");
       let snapshot;
@@ -37,28 +51,20 @@ export default function Dashboard() {
         snapshot = await getDocs(blogsRef);
       }
 
-      if (!snapshot.empty) {
-        const blogsList = snapshot.docs.map((docSnap) => ({
+      if (snapshot && !snapshot.empty) {
+        firestoreDocs = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
         }));
-
-        blogsList.sort((a, b) => {
-          const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-          const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-          return timeB - timeA;
-        });
-
-        setBlogs(blogsList);
-      } else {
-        setBlogs([]);
       }
     } catch (err) {
-      console.error("Error fetching blogs:", err);
-      setError("Unable to load blogs from Firestore.");
-    } finally {
-      setLoading(false);
+      console.warn("Firestore fetch error, falling back to local posts:", err);
     }
+
+    // 3. Combine custom blogs, firestore documents, and sample stories
+    const combined = combineBlogsConsistently(firestoreDocs, localCustom);
+    setBlogs(combined);
+    setLoading(false);
   };
 
   const handleSeedDefaults = async () => {
@@ -66,7 +72,8 @@ export default function Dashboard() {
     try {
       await seedInitialBlogsIfEmpty();
       await fetchBlogs();
-      setSuccessMessage("Gutenverse sample articles populated in Firestore!");
+      setSuccessMessage("Sample articles synchronized with Firestore!");
+      setTimeout(() => setSuccessMessage(""), 4000);
     } catch (err) {
       console.error("Seeding error:", err);
       setError("Could not populate sample articles.");
@@ -89,10 +96,38 @@ export default function Dashboard() {
 
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "blogs", blogToDelete.id));
+      // 1. Delete from Firestore if it's a Firestore document
+      try {
+        await deleteDoc(doc(db, "blogs", blogToDelete.id));
+      } catch (firestoreErr) {
+        console.warn("Firestore delete issue:", firestoreErr);
+      }
 
+      // 2. Remove from local custom blogs if present
+      try {
+        const localList = JSON.parse(
+          localStorage.getItem("daily_news_custom_blogs") || "[]"
+        );
+        const updated = localList.filter((b) => b.id !== blogToDelete.id);
+        localStorage.setItem("daily_news_custom_blogs", JSON.stringify(updated));
+      } catch (storageErr) {
+        console.warn("Storage update issue:", storageErr);
+      }
+
+      // 3. Save to deleted IDs blacklist so default posts don't re-seed
+      try {
+        const delList = JSON.parse(
+          localStorage.getItem("daily_news_deleted_ids") || "[]"
+        );
+        if (!delList.includes(blogToDelete.id)) {
+          delList.push(blogToDelete.id);
+          localStorage.setItem("daily_news_deleted_ids", JSON.stringify(delList));
+        }
+      } catch (delErr) {}
+
+      // Update state
       setBlogs((prev) => prev.filter((b) => b.id !== blogToDelete.id));
-      setSuccessMessage("Story deleted successfully from Firestore.");
+      setSuccessMessage("Story deleted successfully.");
 
       setTimeout(() => {
         setSuccessMessage("");
@@ -126,7 +161,7 @@ export default function Dashboard() {
               />
             )}
             <p className="text-xs text-gray-500">
-              Authenticated editor: <span className="font-medium text-gray-800">{user?.displayName || user?.email}</span>
+              Authenticated editor: <span className="font-medium text-gray-800">{user?.displayName || user?.email || "Editorial Staff"}</span>
             </p>
           </div>
         </div>
@@ -142,9 +177,10 @@ export default function Dashboard() {
           </button>
           <Link
             to="/dashboard/create"
-            className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold px-5 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
+            className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold px-5 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-sm flex items-center gap-1.5"
           >
-            + Create New Story
+            <span>+</span>
+            <span>CREATE NEW STORY</span>
           </Link>
           <button
             onClick={handleLogout}
@@ -180,7 +216,7 @@ export default function Dashboard() {
       {/* Empty State */}
       {!loading && blogs.length === 0 && (
         <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded p-8">
-          <h2 className="font-heading text-xl font-bold text-gray-800 mb-2">No stories in Firestore</h2>
+          <h2 className="font-heading text-xl font-bold text-gray-800 mb-2">No stories available</h2>
           <p className="text-xs text-gray-600 mb-6">
             You can write a new story or populate the sample Gutenverse stories with one click.
           </p>
@@ -204,13 +240,15 @@ export default function Dashboard() {
       {/* Blog Posts List */}
       {!loading && blogs.length > 0 && (
         <div className="space-y-4">
-          <div className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
-            Published Stories ({blogs.length})
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+            <span>All Published Stories ({blogs.length})</span>
+            <span className="text-[11px] font-normal lowercase text-gray-400">Click Edit to modify any article</span>
           </div>
+
           {blogs.map((blog) => (
             <div
               key={blog.id}
-              className="bg-white border border-gray-200 rounded p-4 flex flex-col md:flex-row gap-5 items-start md:items-center justify-between hover:border-gray-300 transition-colors"
+              className="bg-white border border-gray-200 rounded p-4 flex flex-col md:flex-row gap-5 items-start md:items-center justify-between hover:border-gray-300 transition-colors shadow-xs"
             >
               {/* Blog Image */}
               <div className="w-full md:w-36 h-24 bg-gray-100 rounded overflow-hidden shrink-0 relative">
@@ -234,7 +272,7 @@ export default function Dashboard() {
               {/* Blog Details */}
               <div className="flex-grow min-w-0">
                 <div className="text-[10px] font-bold tracking-widest text-[#f84560] uppercase mb-1">
-                  {blog.category || "Story"}
+                  {blog.category || "Featured"}
                 </div>
                 <h2 className="font-heading text-base font-bold text-gray-900 mb-1 truncate">
                   {blog.title}
@@ -252,17 +290,18 @@ export default function Dashboard() {
                 <Link
                   to={`/blog/${blog.id}`}
                   target="_blank"
-                  className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors"
+                  className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded transition-colors border border-gray-200"
                 >
                   View
                 </Link>
                 <Link
                   to={`/dashboard/edit/${blog.id}`}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors"
+                  className="bg-[#22252a] hover:bg-black text-white text-xs font-bold uppercase tracking-wider px-3.5 py-1.5 rounded transition-colors shadow-xs"
                 >
                   Edit
                 </Link>
                 <button
+                  type="button"
                   onClick={() => setBlogToDelete(blog)}
                   className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors cursor-pointer"
                 >
@@ -282,7 +321,7 @@ export default function Dashboard() {
               Confirm Delete
             </h3>
             <p className="text-gray-600 text-sm mb-6">
-              Are you sure you want to delete <strong className="text-gray-900">"{blogToDelete.title}"</strong>? This will permanently remove the story from Firestore.
+              Are you sure you want to delete <strong className="text-gray-900">"{blogToDelete.title}"</strong>?
             </p>
             <div className="flex justify-end gap-3">
               <button

@@ -86,8 +86,8 @@ export default function CreateBlog() {
         console.warn("Storage caching error:", storageErr);
       }
 
-      // Direct user straight to Home to immediately see their newly created blog in the Hero section!
-      navigate("/");
+      // Direct user straight to Dashboard where they can view, edit, or manage the new story!
+      navigate("/dashboard");
     } catch (err) {
       console.error("Error creating blog:", err);
       setError("Unable to save story. Please try again.");

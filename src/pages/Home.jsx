@@ -2,75 +2,15 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
-import { DEFAULT_POSTS, seedInitialBlogsIfEmpty } from "../utils/seedData";
-import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
+import {
+  DEFAULT_POSTS,
+  seedInitialBlogsIfEmpty,
+  combineBlogsConsistently,
+  getBlogTime,
+} from "../utils/seedData";
 import HeroSection from "../components/HeroSection";
 import BlogCard from "../components/BlogCard";
 import StaffPicksSection from "../components/StaffPicksSection";
-
-// Helper to get time value for consistent sorting
-function getBlogTime(doc) {
-  if (!doc) return 0;
-  if (doc.createdAt?.toDate) return doc.createdAt.toDate().getTime();
-  if (doc.createdAt instanceof Date) return doc.createdAt.getTime();
-  if (typeof doc.createdAt === "number") return doc.createdAt;
-  if (typeof doc.createdAt === "string") {
-    const t = new Date(doc.createdAt).getTime();
-    if (!isNaN(t)) return t;
-  }
-  return 0;
-}
-
-// Combines live user posts and default editorial stories so sections NEVER break or empty out
-function combineBlogsConsistently(firestoreDocs = [], localCustom = []) {
-  const defaultWithIds = DEFAULT_POSTS.map((p, idx) => ({
-    id: `post-${idx}`,
-    ...p,
-  }));
-
-  // Clean firestore documents of any broken URLs
-  const cleanFirestore = firestoreDocs.map((doc) => {
-    let cleanImg = doc.imageUrl;
-    if (!cleanImg || cleanImg.includes("photo-1477959858617-67f30bc75b82")) {
-      cleanImg = heroCityStreetImg;
-    }
-    return {
-      ...doc,
-      imageUrl: cleanImg,
-    };
-  });
-
-  const existingIds = new Set(cleanFirestore.map((d) => d.id));
-  const uniqueLocal = localCustom.filter((c) => !existingIds.has(c.id));
-
-  // Merge live user posts
-  const liveList = [...uniqueLocal, ...cleanFirestore];
-  liveList.sort((a, b) => getBlogTime(b) - getBlogTime(a));
-
-  // Merge with default editorial stories to guarantee all sections are complete
-  const titlesSeen = new Set();
-  const finalMerged = [];
-
-  // Add live user and firestore docs first (newest at the top)
-  for (const item of liveList) {
-    const key = (item.title || "").toLowerCase().trim();
-    if (key && !titlesSeen.has(key)) {
-      titlesSeen.add(key);
-      finalMerged.push(item);
-    }
-  }
-
-  // Then add remaining default editorial stories
-  for (const item of defaultWithIds) {
-    const key = (item.title || "").toLowerCase().trim();
-    if (key && !titlesSeen.has(key)) {
-      titlesSeen.add(key);
-      finalMerged.push(item);
-    }
-  }
-
-  return finalMerged;
-}
 
 function getInitialPosts() {
   let customBlogs = [];

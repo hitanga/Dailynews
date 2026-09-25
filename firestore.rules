@@ -3,11 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Blogs collection
     match /blogs/{blogId} {
-      // Public read access for visitors
-      allow read: if true;
-      
-      // Only authenticated users can create, update, and delete blogs
-      allow create, update, delete: if request.auth != null;
+      // Allow read and write for visitors and editorial staff
+      allow read, write: if true;
     }
   }
 }

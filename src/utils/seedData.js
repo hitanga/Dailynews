@@ -79,6 +79,78 @@ export const DEFAULT_POSTS = [
   }
 ];
 
+export function getBlogTime(doc) {
+  if (!doc) return 0;
+  if (doc.createdAt?.toDate) return doc.createdAt.toDate().getTime();
+  if (doc.createdAt instanceof Date) return doc.createdAt.getTime();
+  if (typeof doc.createdAt === "number") return doc.createdAt;
+  if (typeof doc.createdAt === "string") {
+    const t = new Date(doc.createdAt).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return 0;
+}
+
+export function combineBlogsConsistently(firestoreDocs = [], localCustom = []) {
+  let deletedIds = new Set();
+  try {
+    const del = JSON.parse(localStorage.getItem("daily_news_deleted_ids") || "[]");
+    deletedIds = new Set(del);
+  } catch (e) {}
+
+  const defaultWithIds = DEFAULT_POSTS.map((p, idx) => ({
+    id: `post-${idx}`,
+    ...p,
+  }));
+
+  // Clean firestore documents of any broken URLs and filter deleted
+  const cleanFirestore = firestoreDocs
+    .filter((doc) => !deletedIds.has(doc.id))
+    .map((doc) => {
+      let cleanImg = doc.imageUrl;
+      if (!cleanImg || cleanImg.includes("photo-1477959858617-67f30bc75b82")) {
+        cleanImg = heroCityStreetImg;
+      }
+      return {
+        ...doc,
+        imageUrl: cleanImg,
+      };
+    });
+
+  const existingIds = new Set(cleanFirestore.map((d) => d.id));
+  const uniqueLocal = localCustom
+    .filter((c) => !existingIds.has(c.id) && !deletedIds.has(c.id));
+
+  // Merge live user posts
+  const liveList = [...uniqueLocal, ...cleanFirestore];
+  liveList.sort((a, b) => getBlogTime(b) - getBlogTime(a));
+
+  // Merge with default editorial stories
+  const titlesSeen = new Set();
+  const finalMerged = [];
+
+  // Add live user and firestore docs first (newest at the top)
+  for (const item of liveList) {
+    const key = (item.title || "").toLowerCase().trim();
+    if (key && !titlesSeen.has(key)) {
+      titlesSeen.add(key);
+      finalMerged.push(item);
+    }
+  }
+
+  // Then add remaining default editorial stories that were not deleted
+  for (const item of defaultWithIds) {
+    if (deletedIds.has(item.id)) continue;
+    const key = (item.title || "").toLowerCase().trim();
+    if (key && !titlesSeen.has(key)) {
+      titlesSeen.add(key);
+      finalMerged.push(item);
+    }
+  }
+
+  return finalMerged;
+}
+
 /**
  * Seeds Firestore with default sample blog posts if collection is empty
  */
