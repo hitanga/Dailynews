@@ -11,7 +11,8 @@ export default function EditBlog() {
 
   const [title, setTitle] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [category, setCategory] = useState("Featured");
+  const [categoryType, setCategoryType] = useState("News"); // "News" | "Fun Facts"
+  const [subTag, setSubTag] = useState("");
   const [description, setDescription] = useState("");
 
   const [initialLoading, setInitialLoading] = useState(true);
@@ -25,51 +26,59 @@ export default function EditBlog() {
       setError("");
 
       try {
-        // 1. First check local custom blogs
-        let foundLocally = null;
+        let loadedData = null;
+
+        // 1. Check local custom blogs
         try {
           const localList = JSON.parse(
             localStorage.getItem("daily_news_custom_blogs") || "[]"
           );
-          foundLocally = localList.find((b) => b.id === id);
+          const found = localList.find((b) => b.id === id);
+          if (found) loadedData = found;
         } catch (e) {}
 
-        if (foundLocally) {
-          setTitle(foundLocally.title || "");
-          setImageUrl(foundLocally.imageUrl || "");
-          setCategory(foundLocally.category || "Featured");
-          setDescription(foundLocally.description || "");
-          setInitialLoading(false);
-          return;
-        }
-
         // 2. Check Firestore
-        try {
-          const blogRef = doc(db, "blogs", id);
-          const docSnap = await getDoc(blogRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setTitle(data.title || "");
-            setImageUrl(data.imageUrl || "");
-            setCategory(data.category || "Featured");
-            setDescription(data.description || "");
-            setInitialLoading(false);
-            return;
+        if (!loadedData) {
+          try {
+            const blogRef = doc(db, "blogs", id);
+            const docSnap = await getDoc(blogRef);
+            if (docSnap.exists()) {
+              loadedData = { id: docSnap.id, ...docSnap.data() };
+            }
+          } catch (firestoreErr) {
+            console.warn("Firestore fetch error:", firestoreErr);
           }
-        } catch (firestoreErr) {
-          console.warn("Firestore fetch error:", firestoreErr);
         }
 
         // 3. Check DEFAULT_POSTS (for sample/editorial articles)
-        const sampleMatch = DEFAULT_POSTS.find(
-          (p, idx) => `post-${idx}` === id || p.title.toLowerCase().includes(id.toLowerCase())
-        );
+        if (!loadedData) {
+          const sampleMatch = DEFAULT_POSTS.find(
+            (p, idx) =>
+              `post-${idx}` === id ||
+              p.title.toLowerCase().includes(id.toLowerCase())
+          );
+          if (sampleMatch) loadedData = { id, ...sampleMatch };
+        }
 
-        if (sampleMatch) {
-          setTitle(sampleMatch.title || "");
-          setImageUrl(sampleMatch.imageUrl || "");
-          setCategory(sampleMatch.category || "Featured");
-          setDescription(sampleMatch.description || "");
+        if (loadedData) {
+          setTitle(loadedData.title || "");
+          setImageUrl(loadedData.imageUrl || "");
+          setDescription(loadedData.description || "");
+
+          const cat = loadedData.category || "News";
+          if (cat.toLowerCase().includes("fun fact")) {
+            setCategoryType("Fun Facts");
+          } else {
+            setCategoryType("News");
+          }
+
+          // Clean sub-tags
+          const cleanSub = cat
+            .replace(/fun facts?/gi, "")
+            .replace(/news/gi, "")
+            .replace(/^[,\s]+|[,\s]+$/g, "");
+          setSubTag(cleanSub);
+
           setInitialLoading(false);
           return;
         }
@@ -111,10 +120,14 @@ export default function EditBlog() {
     setSaving(true);
 
     try {
+      const finalCategory = subTag.trim()
+        ? `${categoryType}, ${subTag.trim()}`
+        : categoryType;
+
       const updatedFields = {
         title: title.trim(),
         imageUrl: imageUrl.trim(),
-        category: category.trim() || "Featured",
+        category: finalCategory,
         description: description.trim(),
         updatedAt: serverTimestamp(),
       };
@@ -138,7 +151,7 @@ export default function EditBlog() {
           id,
           title: title.trim(),
           imageUrl: imageUrl.trim(),
-          category: category.trim() || "Featured",
+          category: finalCategory,
           description: description.trim(),
           updatedAt: new Date().toISOString(),
         };
@@ -191,7 +204,7 @@ export default function EditBlog() {
           Edit Story
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Modify the title, category, cover photo, font styling, colors, or narrative body.
+          Modify the category, title, cover photo, font styling, or narrative body.
         </p>
       </div>
 
@@ -202,6 +215,87 @@ export default function EditBlog() {
       )}
 
       <form onSubmit={handleUpdate} className="space-y-6">
+        {/* Category Selection Cards: News vs Fun Facts */}
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-2">
+            Select Story Category *
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+            {/* 1. News Card */}
+            <div
+              onClick={() => setCategoryType("News")}
+              className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                categoryType === "News"
+                  ? "border-[#f84560] bg-red-50/30 shadow-xs"
+                  : "border-gray-200 hover:border-gray-300 bg-white"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-heading font-extrabold text-sm text-gray-900 flex items-center gap-2">
+                  <span>📰</span>
+                  <span>News Story</span>
+                </span>
+                <span
+                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    categoryType === "News"
+                      ? "border-[#f84560] bg-[#f84560]"
+                      : "border-gray-300"
+                  }`}
+                >
+                  {categoryType === "News" && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                  )}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Displays in the <strong>Latest News</strong> section on the homepage.
+              </p>
+            </div>
+
+            {/* 2. Fun Facts Card */}
+            <div
+              onClick={() => setCategoryType("Fun Facts")}
+              className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                categoryType === "Fun Facts"
+                  ? "border-amber-500 bg-amber-50/40 shadow-xs"
+                  : "border-gray-200 hover:border-gray-300 bg-white"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-heading font-extrabold text-sm text-gray-900 flex items-center gap-2">
+                  <span>💡</span>
+                  <span>Fun Facts</span>
+                </span>
+                <span
+                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                    categoryType === "Fun Facts"
+                      ? "border-amber-500 bg-amber-500"
+                      : "border-gray-300"
+                  }`}
+                >
+                  {categoryType === "Fun Facts" && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                  )}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">
+                Displays in the dedicated <strong>Fun Facts</strong> discovery section.
+              </p>
+            </div>
+          </div>
+
+          {/* Optional Sub-tag */}
+          <div className="mt-2">
+            <input
+              type="text"
+              value={subTag}
+              onChange={(e) => setSubTag(e.target.value)}
+              placeholder="Optional tags (e.g. Science, Tech, Finance, Nature)"
+              className="w-full px-3 py-2 border border-gray-200 rounded text-gray-700 text-xs focus:outline-none focus:border-[#f84560]"
+            />
+          </div>
+        </div>
+
         {/* Title */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
@@ -212,19 +306,6 @@ export default function EditBlog() {
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
-          />
-        </div>
-
-        {/* Category */}
-        <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Category / Tags
-          </label>
-          <input
-            type="text"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
             className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
           />
         </div>
@@ -287,7 +368,7 @@ export default function EditBlog() {
             disabled={saving}
             className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold text-xs uppercase tracking-wider px-8 py-3.5 rounded-full transition-colors disabled:opacity-50 cursor-pointer shadow-md"
           >
-            {saving ? "Saving Changes..." : "Save Changes"}
+            {saving ? "Saving Changes..." : `Save ${categoryType} Changes`}
           </button>
           <Link
             to="/dashboard"

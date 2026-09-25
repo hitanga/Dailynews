@@ -147,7 +147,21 @@ export default function Navbar({ onSearch }) {
               </Link>
             </li>
 
-            {/* 3. SEARCH (After News Link, No Search Icon) */}
+            {/* 3. FUN FACTS */}
+            <li>
+              <Link
+                to="/?category=fun facts"
+                className={`transition-colors ${
+                  location.search.includes("category=fun")
+                    ? "text-[#f84560]"
+                    : "hover:text-[#f84560]"
+                }`}
+              >
+                FUN FACTS
+              </Link>
+            </li>
+
+            {/* 4. SEARCH (No Search Icon) */}
             <li>
               <button
                 type="button"

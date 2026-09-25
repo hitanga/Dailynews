@@ -6,11 +6,10 @@ import {
   DEFAULT_POSTS,
   seedInitialBlogsIfEmpty,
   combineBlogsConsistently,
-  getBlogTime,
 } from "../utils/seedData";
 import HeroSection from "../components/HeroSection";
 import BlogCard from "../components/BlogCard";
-import StaffPicksSection from "../components/StaffPicksSection";
+import FunFactsSection from "../components/StaffPicksSection";
 
 function getInitialPosts() {
   let customBlogs = [];
@@ -26,7 +25,7 @@ function getInitialPosts() {
 
 export default function Home() {
   const [blogs, setBlogs] = useState(getInitialPosts);
-  const [visibleCount, setVisibleCount] = useState(6);
+  const [visibleNewsCount, setVisibleNewsCount] = useState(6);
   const [searchParams] = useSearchParams();
 
   const searchQuery = searchParams.get("q") || "";
@@ -69,7 +68,11 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
-  // Filter based on search query or category
+  // Separate News vs Fun Facts
+  const isFunFact = (blog) =>
+    (blog.category || "").toLowerCase().includes("fun fact");
+
+  // Filter based on search query or category filter
   const filteredBlogs = blogs.filter((blog) => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -85,19 +88,26 @@ export default function Home() {
     return true;
   });
 
-  // Hero post: Always the newest story (blogs[0])
-  const heroPost = filteredBlogs.length > 0 ? filteredBlogs[0] : null;
+  // News stories (all non-fun-fact stories or stories explicitly categorized as news)
+  const newsStories = filteredBlogs.filter((b) => !isFunFact(b));
+  // Fun facts stories
+  const funFactStories = filteredBlogs.filter((b) => isFunFact(b));
 
-  // Latest stories: Follows hero post (or take all if filtered)
-  const latestStories =
-    filteredBlogs.length > 1 ? filteredBlogs.slice(1) : filteredBlogs;
+  // Hero post: Latest news story if available, or first filtered blog
+  const heroPost = !searchQuery && !categoryFilter && newsStories.length > 0
+    ? newsStories[0]
+    : filteredBlogs.length > 0
+    ? filteredBlogs[0]
+    : null;
 
-  // Staff picks: Always takes items 2 through 6 so there are always 4 picks
-  const staffPicks =
-    blogs.length > 4 ? blogs.slice(2, 6) : blogs.slice(0, 4);
+  // Latest News grid: excludes hero post on default view
+  const latestNewsList =
+    !searchQuery && !categoryFilter && newsStories.length > 1
+      ? newsStories.slice(1)
+      : newsStories;
 
-  const handleLoadMore = () => {
-    setVisibleCount((prev) => prev + 3);
+  const handleLoadMoreNews = () => {
+    setVisibleNewsCount((prev) => prev + 3);
   };
 
   return (
@@ -123,53 +133,54 @@ export default function Home() {
         </div>
       )}
 
-      {/* 1. Hero Feature Section (Displays newest/featured blog) */}
+      {/* 1. Hero Feature Section (Displays newest/featured news blog) */}
       {!searchQuery && !categoryFilter && heroPost && (
         <HeroSection blog={heroPost} />
       )}
 
-      {/* 2. Latest Stories Section */}
+      {/* 2. Latest News Section (Renamed from Latest Stories) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <div className="mb-10 text-left">
-          <span className="block text-[11px] font-bold tracking-[0.22em] text-gray-800 uppercase mb-1.5">
-            BROWSE AND READ THE LATEST STUFF
+          <span className="block text-[11px] font-bold tracking-[0.22em] text-[#f84560] uppercase mb-1.5 flex items-center gap-1.5">
+            <span>📰</span>
+            <span>BROWSE AND READ THE LATEST STUFF</span>
           </span>
           <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-            Latest Stories
+            Latest News
           </h2>
         </div>
 
         {/* Empty State when search returns 0 results */}
-        {filteredBlogs.length === 0 && (
-          <div className="py-16 text-center bg-gray-50 border border-gray-100 p-8 my-6">
+        {newsStories.length === 0 && (
+          <div className="py-12 text-center bg-gray-50 border border-gray-100 p-8 my-6 rounded">
             <h3 className="font-heading text-lg font-bold text-gray-800 mb-2">
-              No matching stories found
+              No news stories found
             </h3>
             <p className="text-xs text-gray-500 mb-4">
-              Try a different search term or browse all articles.
+              Write a new story categorized as "News" in the dashboard.
             </p>
             <a
-              href="/"
+              href="/dashboard/create"
               className="inline-block bg-[#f84560] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-full"
             >
-              View All Stories
+              Create News Story
             </a>
           </div>
         )}
 
-        {/* 3-Column Stories Grid */}
+        {/* 3-Column Latest News Stories Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
-          {latestStories.slice(0, visibleCount).map((blog) => (
+          {latestNewsList.slice(0, visibleNewsCount).map((blog) => (
             <BlogCard key={blog.id} blog={blog} />
           ))}
         </div>
 
-        {/* "MORE POSTS" Button */}
-        {latestStories.length > visibleCount && (
+        {/* "MORE POSTS" Button for Latest News */}
+        {latestNewsList.length > visibleNewsCount && (
           <div className="mt-14 text-center">
             <button
               type="button"
-              onClick={handleLoadMore}
+              onClick={handleLoadMoreNews}
               className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white font-heading font-bold text-[11px] tracking-[0.16em] uppercase px-9 py-3.5 rounded-full shadow-sm hover:shadow transition-all cursor-pointer"
             >
               MORE POSTS
@@ -178,9 +189,9 @@ export default function Home() {
         )}
       </section>
 
-      {/* 3. Staff's Picks Section */}
-      {!searchQuery && !categoryFilter && (
-        <StaffPicksSection blogs={staffPicks} />
+      {/* 3. Fun Facts Section (Changed from Staff's Picks) */}
+      {!searchQuery && !categoryFilter && funFactStories.length > 0 && (
+        <FunFactsSection blogs={funFactStories} />
       )}
     </main>
   );
