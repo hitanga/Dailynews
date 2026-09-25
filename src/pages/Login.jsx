@@ -2,18 +2,28 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import appletConfig from "../../firebase-applet-config.json";
+import { getActiveFirebaseConfig } from "../firebase";
 
 export default function Login() {
   const [error, setError] = useState("");
   const [unauthorizedDomain, setUnauthorizedDomain] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+
+  // Custom Firebase configuration fields for Vercel deployment
+  const [customApiKey, setCustomApiKey] = useState("");
+  const [customAuthDomain, setCustomAuthDomain] = useState("");
+  const [customProjectId, setCustomProjectId] = useState("");
+  const [customAppId, setCustomAppId] = useState("");
+  const [configSuccess, setConfigSuccess] = useState(false);
 
   const { loginWithGoogle, loginAsEditor, user } = useAuth();
   const navigate = useNavigate();
 
   const currentHostname = typeof window !== "undefined" ? window.location.hostname : "";
-  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || "axiomatic-constant-gmn89";
+  const activeConfig = getActiveFirebaseConfig();
+  const projectId = activeConfig.projectId || appletConfig.projectId || "axiomatic-constant-gmn89";
   const firebaseSettingsUrl = `https://console.firebase.google.com/project/${projectId}/authentication/settings`;
 
   // If user is already authenticated, redirect to dashboard
@@ -29,13 +39,13 @@ export default function Login() {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (preferRedirect = false) => {
     setError("");
     setUnauthorizedDomain(false);
     setLoading(true);
 
     try {
-      await loginWithGoogle();
+      await loginWithGoogle(preferRedirect);
       navigate("/dashboard");
     } catch (err) {
       console.error("Google Auth error:", err);
@@ -46,9 +56,12 @@ export default function Login() {
       } else if (err.code === "auth/popup-closed-by-user") {
         setError("Sign-in window was closed before completing.");
       } else if (err.code === "auth/popup-blocked") {
-        setError("Sign-in popup was blocked by your browser. Please allow popups for this site.");
-      } else if (err.code === "auth/cancelled-popup-request") {
-        setError("");
+        setError("Sign-in popup was blocked. Switching to redirect sign-in...");
+        try {
+          await loginWithGoogle(true);
+        } catch (redirectErr) {
+          setError("Please allow popups or redirect authentication for this domain.");
+        }
       } else if (err.code === "auth/network-request-failed") {
         setError("Network error. Please check your internet connection.");
       } else {
@@ -62,6 +75,33 @@ export default function Login() {
   const handleEditorLogin = () => {
     loginAsEditor();
     navigate("/dashboard");
+  };
+
+  const handleSaveCustomFirebase = (e) => {
+    e.preventDefault();
+    if (!customApiKey.trim() || !customProjectId.trim()) {
+      setError("Please provide at least the API Key and Project ID.");
+      return;
+    }
+
+    const configToSave = {
+      apiKey: customApiKey.trim(),
+      authDomain: customAuthDomain.trim() || `${customProjectId.trim()}.firebaseapp.com`,
+      projectId: customProjectId.trim(),
+      storageBucket: `${customProjectId.trim()}.appspot.com`,
+      appId: customAppId.trim() || "",
+    };
+
+    try {
+      localStorage.setItem("custom_firebase_config", JSON.stringify(configToSave));
+      setConfigSuccess(true);
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } catch (err) {
+      console.error("Failed to save config:", err);
+      setError("Unable to save custom configuration.");
+    }
   };
 
   return (
@@ -86,33 +126,22 @@ export default function Login() {
         {unauthorizedDomain && (
           <div className="mb-6 bg-amber-50 border border-amber-300 text-left p-4 rounded text-xs text-amber-900 space-y-3">
             <h3 className="font-bold text-amber-950 flex items-center gap-1.5 text-sm">
-              <span>⚠️ Why is this error still showing if you already added the domain?</span>
+              <span>⚠️ Action Required: Domain Authorization on Vercel</span>
             </h3>
             
             <p className="text-amber-900 leading-relaxed">
-              If you have already added <strong>{currentHostname}</strong> to Firebase, please check these 3 common causes:
+              If you added <strong>{currentHostname}</strong> to Firebase Authorized Domains, this error occurs because:
             </p>
 
             <ul className="list-disc list-inside space-y-1.5 text-[11px] text-amber-950 font-medium">
               <li>
-                <strong>1. 5–10 Minute Propagation Delay:</strong> Google OAuth servers cache domain permissions and take <strong>5 to 10 minutes</strong> to propagate globally across all endpoints.
+                <strong>1. Project ID Mismatch:</strong> Your Vercel build is currently pointing to project <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-mono font-bold">{projectId}</code>. If you added the domain to a different Firebase project, click below to connect your own project!
               </li>
               <li>
-                <strong>2. Correct Project Verification:</strong> Ensure you added the domain to Firebase Project <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-mono font-bold">{projectId}</code>.{" "}
-                <a
-                  href={firebaseSettingsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-amber-800 underline hover:text-amber-950 font-bold"
-                >
-                  Open {projectId} Settings ↗
-                </a>
+                <strong>2. Google OAuth CDN Propagation (5–10 min):</strong> If you just added the domain, Google servers take a few minutes to update globally.
               </li>
               <li>
-                <strong>3. Exact Domain Format:</strong> Ensure the domain was pasted without <code className="bg-amber-100 px-1 rounded">https://</code> or trailing slashes (i.e. strictly <code className="bg-amber-100 px-1 rounded">{currentHostname}</code>).
-              </li>
-              <li>
-                <strong>4. Browser Cache:</strong> Open an Incognito / Private window or press <kbd className="bg-white border border-amber-300 px-1 rounded">Ctrl+Shift+R</kbd> / <kbd className="bg-white border border-amber-300 px-1 rounded">Cmd+Shift+R</kbd> to clear cached OAuth tokens.
+                <strong>3. Instant Workaround:</strong> Click <strong>"Continue as Editorial Staff"</strong> below to enter the dashboard immediately without any delay!
               </li>
             </ul>
 
@@ -143,7 +172,7 @@ export default function Login() {
           {/* 1. Google OAuth Button */}
           <button
             type="button"
-            onClick={handleGoogleLogin}
+            onClick={() => handleGoogleLogin(false)}
             disabled={loading}
             className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold text-xs py-3 px-4 rounded transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
           >
@@ -190,9 +219,68 @@ export default function Login() {
         </div>
 
         {/* Footer info note */}
-        <p className="text-[11px] text-gray-500 mt-6 leading-relaxed">
-          The Editorial Staff option allows instant access to the dashboard and publishing tools without waiting for Google OAuth domain propagation.
-        </p>
+        <div className="mt-8 pt-4 border-t border-gray-100 flex flex-col gap-2">
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            Current Firebase Project: <span className="font-mono text-gray-700 font-semibold">{projectId}</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowConfigModal(!showConfigModal)}
+            className="text-[11px] text-[#f84560] hover:underline font-bold"
+          >
+            {showConfigModal ? "Hide Custom Project Setup" : "Using your own Firebase project? Click here"}
+          </button>
+        </div>
+
+        {/* Custom Project Config Form */}
+        {showConfigModal && (
+          <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded text-left text-xs">
+            <h4 className="font-bold text-gray-900 mb-2">Connect Your Firebase Project</h4>
+            <p className="text-gray-500 text-[11px] mb-3">
+              If you authorized <code>{currentHostname}</code> in your personal Firebase project, enter its details here:
+            </p>
+            <form onSubmit={handleSaveCustomFirebase} className="space-y-2">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-700 uppercase">Project ID</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. my-daily-news-app"
+                  value={customProjectId}
+                  onChange={(e) => setCustomProjectId(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-xs bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-700 uppercase">API Key</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="AIzaSy..."
+                  value={customApiKey}
+                  onChange={(e) => setCustomApiKey(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-xs bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-700 uppercase">Auth Domain (optional)</label>
+                <input
+                  type="text"
+                  placeholder="my-daily-news-app.firebaseapp.com"
+                  value={customAuthDomain}
+                  onChange={(e) => setCustomAuthDomain(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded text-xs bg-white"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full bg-[#f84560] text-white font-bold py-2 rounded text-xs uppercase tracking-wider mt-2 cursor-pointer"
+              >
+                {configSuccess ? "Connected! Reloading..." : "Connect Project"}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );
