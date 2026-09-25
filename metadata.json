@@ -1,0 +1,6 @@
+{
+  "name": "React Blog with Firebase Authentication & Firestore",
+  "description": "A clean, functional React JS blog platform featuring Firebase Authentication, Firestore database CRUD, live image preview, and an admin dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

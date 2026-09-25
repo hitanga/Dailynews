@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Blogs collection
+    match /blogs/{blogId} {
+      // Public read access for visitors
+      allow read: if true;
+      
+      // Only authenticated users can create, update, and delete blogs
+      allow create, update, delete: if request.auth != null;
+    }
+  }
+}
