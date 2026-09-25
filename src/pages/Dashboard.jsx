@@ -4,12 +4,14 @@ import { collection, getDocs, doc, deleteDoc, query, orderBy } from "firebase/fi
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { formatDate } from "../components/BlogCard";
+import { DEFAULT_POSTS, seedInitialBlogsIfEmpty } from "../utils/seedData";
 
 export default function Dashboard() {
   const [blogs, setBlogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [isSeeding, setIsSeeding] = useState(false);
 
   // Delete confirmation modal state
   const [blogToDelete, setBlogToDelete] = useState(null);
@@ -35,24 +37,41 @@ export default function Dashboard() {
         snapshot = await getDocs(blogsRef);
       }
 
-      const blogsList = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
+      if (!snapshot.empty) {
+        const blogsList = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
 
-      // Sort in-memory to ensure latest is first
-      blogsList.sort((a, b) => {
-        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-        return timeB - timeA;
-      });
+        blogsList.sort((a, b) => {
+          const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return timeB - timeA;
+        });
 
-      setBlogs(blogsList);
+        setBlogs(blogsList);
+      } else {
+        setBlogs([]);
+      }
     } catch (err) {
       console.error("Error fetching blogs:", err);
-      setError("Unable to load blogs. Please try again.");
+      setError("Unable to load blogs from Firestore.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSeedDefaults = async () => {
+    setIsSeeding(true);
+    try {
+      await seedInitialBlogsIfEmpty();
+      await fetchBlogs();
+      setSuccessMessage("Gutenverse sample articles populated in Firestore!");
+    } catch (err) {
+      console.error("Seeding error:", err);
+      setError("Could not populate sample articles.");
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -70,14 +89,11 @@ export default function Dashboard() {
 
     setIsDeleting(true);
     try {
-      // Delete document from Firestore
       await deleteDoc(doc(db, "blogs", blogToDelete.id));
 
-      // Refresh blogs list
       setBlogs((prev) => prev.filter((b) => b.id !== blogToDelete.id));
-      setSuccessMessage("Blog deleted successfully.");
+      setSuccessMessage("Story deleted successfully from Firestore.");
 
-      // Clear alert after 4 seconds
       setTimeout(() => {
         setSuccessMessage("");
       }, 4000);
@@ -91,12 +107,17 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-gray-200 mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Blog Dashboard</h1>
-          <div className="flex items-center gap-2 mt-1">
+          <span className="text-[10px] font-bold tracking-[0.2em] text-[#f84560] uppercase mb-1 block">
+            DAILY NEWS EDITORIAL
+          </span>
+          <h1 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
+            Editorial Dashboard
+          </h1>
+          <div className="flex items-center gap-2 mt-1.5">
             {user?.photoURL && (
               <img
                 src={user.photoURL}
@@ -104,23 +125,30 @@ export default function Dashboard() {
                 className="w-5 h-5 rounded-full object-cover"
               />
             )}
-            <p className="text-sm text-gray-500">
-              Logged in as <span className="font-medium text-gray-700">{user?.displayName || user?.email}</span>
+            <p className="text-xs text-gray-500">
+              Authenticated editor: <span className="font-medium text-gray-800">{user?.displayName || user?.email}</span>
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleSeedDefaults}
+            disabled={isSeeding}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer"
+          >
+            {isSeeding ? "Populating..." : "Seed Sample Articles"}
+          </button>
           <Link
             to="/dashboard/create"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded text-sm transition-colors cursor-pointer"
+            className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold px-5 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
           >
-            Create New Blog
+            + Create New Story
           </Link>
           <button
             onClick={handleLogout}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-4 py-2 rounded text-sm transition-colors cursor-pointer"
+            className="text-gray-500 hover:text-gray-800 font-semibold px-3 py-2 text-xs uppercase tracking-wider transition-colors cursor-pointer"
           >
             Logout
           </button>
@@ -129,49 +157,63 @@ export default function Dashboard() {
 
       {/* Success Notification */}
       {successMessage && (
-        <div className="mb-6 bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded">
+        <div className="mb-6 bg-green-50 border border-green-200 text-green-800 text-xs px-4 py-3 rounded">
           {successMessage}
         </div>
       )}
 
       {/* Error Notification */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded">
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded">
           {error}
         </div>
       )}
 
       {/* Loading State */}
       {loading && (
-        <div className="text-center py-16 text-gray-600">
-          <p className="text-base">Loading blogs...</p>
+        <div className="text-center py-20 text-gray-500">
+          <div className="w-8 h-8 border-3 border-[#f84560] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-xs uppercase tracking-wider font-bold">Loading dashboard stories...</p>
         </div>
       )}
 
       {/* Empty State */}
       {!loading && blogs.length === 0 && (
-        <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">No blogs found</h2>
-          <p className="text-gray-600 mb-6">You haven't written any blog posts yet.</p>
-          <Link
-            to="/dashboard/create"
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2 rounded text-sm transition-colors"
-          >
-            Create Your First Blog
-          </Link>
+        <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded p-8">
+          <h2 className="font-heading text-xl font-bold text-gray-800 mb-2">No stories in Firestore</h2>
+          <p className="text-xs text-gray-600 mb-6">
+            You can write a new story or populate the sample Gutenverse stories with one click.
+          </p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={handleSeedDefaults}
+              className="bg-gray-800 hover:bg-gray-900 text-white font-bold px-5 py-2 rounded-full text-xs uppercase tracking-wider"
+            >
+              Populate Sample Stories
+            </button>
+            <Link
+              to="/dashboard/create"
+              className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white font-bold px-5 py-2 rounded-full text-xs uppercase tracking-wider transition-colors"
+            >
+              Write First Story
+            </Link>
+          </div>
         </div>
       )}
 
       {/* Blog Posts List */}
       {!loading && blogs.length > 0 && (
-        <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">
+            Published Stories ({blogs.length})
+          </div>
           {blogs.map((blog) => (
             <div
               key={blog.id}
-              className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col md:flex-row gap-5 items-start md:items-center justify-between"
+              className="bg-white border border-gray-200 rounded p-4 flex flex-col md:flex-row gap-5 items-start md:items-center justify-between hover:border-gray-300 transition-colors"
             >
               {/* Blog Image */}
-              <div className="w-full md:w-44 h-32 bg-gray-100 rounded overflow-hidden flex-shrink-0 flex items-center justify-center border border-gray-100">
+              <div className="w-full md:w-36 h-24 bg-gray-100 rounded overflow-hidden shrink-0 relative">
                 {blog.imageUrl ? (
                   <img
                     src={blog.imageUrl}
@@ -182,34 +224,47 @@ export default function Dashboard() {
                     }}
                   />
                 ) : (
-                  <span className="text-gray-400 text-xs">No Image</span>
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                    No image
+                  </div>
                 )}
+                <div className="absolute bottom-0 right-0 w-4 h-4 bg-[#22252a]" />
               </div>
 
               {/* Blog Details */}
               <div className="flex-grow min-w-0">
-                <h2 className="text-lg font-bold text-gray-900 mb-1 truncate">
+                <div className="text-[10px] font-bold tracking-widest text-[#f84560] uppercase mb-1">
+                  {blog.category || "Story"}
+                </div>
+                <h2 className="font-heading text-base font-bold text-gray-900 mb-1 truncate">
                   {blog.title}
                 </h2>
-                <p className="text-gray-600 text-sm mb-2 line-clamp-2">
+                <p className="text-gray-500 text-xs mb-2 line-clamp-1">
                   {blog.description}
                 </p>
-                <p className="text-xs text-gray-500">
-                  Created: {formatDate(blog.createdAt) || "Recently"}
+                <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                  Published: {formatDate(blog.createdAt, blog.dateString)}
                 </p>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 flex-shrink-0 self-end md:self-center">
+              <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                <Link
+                  to={`/blog/${blog.id}`}
+                  target="_blank"
+                  className="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors"
+                >
+                  View
+                </Link>
                 <Link
                   to={`/dashboard/edit/${blog.id}`}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium px-3 py-1.5 rounded transition-colors"
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors"
                 >
                   Edit
                 </Link>
                 <button
                   onClick={() => setBlogToDelete(blog)}
-                  className="bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium px-3 py-1.5 rounded transition-colors cursor-pointer"
+                  className="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded transition-colors cursor-pointer"
                 >
                   Delete
                 </button>
@@ -221,20 +276,20 @@ export default function Dashboard() {
 
       {/* Delete Confirmation Modal */}
       {blogToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-lg border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded max-w-md w-full p-6 shadow-2xl border border-gray-200">
+            <h3 className="font-heading text-lg font-bold text-gray-900 mb-2">
               Confirm Delete
             </h3>
             <p className="text-gray-600 text-sm mb-6">
-              Are you sure you want to delete this blog?
+              Are you sure you want to delete <strong className="text-gray-900">"{blogToDelete.title}"</strong>? This will permanently remove the story from Firestore.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setBlogToDelete(null)}
                 disabled={isDeleting}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2 rounded transition-colors cursor-pointer"
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold uppercase tracking-wider px-4 py-2 rounded transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -242,9 +297,9 @@ export default function Dashboard() {
                 type="button"
                 onClick={confirmDelete}
                 disabled={isDeleting}
-                className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-4 py-2 rounded transition-colors disabled:opacity-50 cursor-pointer"
+                className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-wider px-4 py-2 rounded transition-colors disabled:opacity-50 cursor-pointer"
               >
-                {isDeleting ? "Deleting..." : "Delete"}
+                {isDeleting ? "Deleting..." : "Delete Story"}
               </button>
             </div>
           </div>

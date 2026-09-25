@@ -1,102 +1,246 @@
 import React, { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { useSearchParams } from "react-router-dom";
+import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { DEFAULT_POSTS, seedInitialBlogsIfEmpty } from "../utils/seedData";
+import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
+import HeroSection from "../components/HeroSection";
 import BlogCard from "../components/BlogCard";
+import StaffPicksSection from "../components/StaffPicksSection";
+
+// Helper to get time value for consistent sorting
+function getBlogTime(doc) {
+  if (!doc) return 0;
+  if (doc.createdAt?.toDate) return doc.createdAt.toDate().getTime();
+  if (doc.createdAt instanceof Date) return doc.createdAt.getTime();
+  if (typeof doc.createdAt === "number") return doc.createdAt;
+  if (typeof doc.createdAt === "string") {
+    const t = new Date(doc.createdAt).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return 0;
+}
+
+// Combines live user posts and default editorial stories so sections NEVER break or empty out
+function combineBlogsConsistently(firestoreDocs = [], localCustom = []) {
+  const defaultWithIds = DEFAULT_POSTS.map((p, idx) => ({
+    id: `post-${idx}`,
+    ...p,
+  }));
+
+  // Clean firestore documents of any broken URLs
+  const cleanFirestore = firestoreDocs.map((doc) => {
+    let cleanImg = doc.imageUrl;
+    if (!cleanImg || cleanImg.includes("photo-1477959858617-67f30bc75b82")) {
+      cleanImg = heroCityStreetImg;
+    }
+    return {
+      ...doc,
+      imageUrl: cleanImg,
+    };
+  });
+
+  const existingIds = new Set(cleanFirestore.map((d) => d.id));
+  const uniqueLocal = localCustom.filter((c) => !existingIds.has(c.id));
+
+  // Merge live user posts
+  const liveList = [...uniqueLocal, ...cleanFirestore];
+  liveList.sort((a, b) => getBlogTime(b) - getBlogTime(a));
+
+  // Merge with default editorial stories to guarantee all sections are complete
+  const titlesSeen = new Set();
+  const finalMerged = [];
+
+  // Add live user and firestore docs first (newest at the top)
+  for (const item of liveList) {
+    const key = (item.title || "").toLowerCase().trim();
+    if (key && !titlesSeen.has(key)) {
+      titlesSeen.add(key);
+      finalMerged.push(item);
+    }
+  }
+
+  // Then add remaining default editorial stories
+  for (const item of defaultWithIds) {
+    const key = (item.title || "").toLowerCase().trim();
+    if (key && !titlesSeen.has(key)) {
+      titlesSeen.add(key);
+      finalMerged.push(item);
+    }
+  }
+
+  return finalMerged;
+}
+
+function getInitialPosts() {
+  let customBlogs = [];
+  try {
+    customBlogs = JSON.parse(
+      localStorage.getItem("daily_news_custom_blogs") || "[]"
+    );
+  } catch (e) {
+    customBlogs = [];
+  }
+  return combineBlogsConsistently([], customBlogs);
+}
 
 export default function Home() {
-  const [blogs, setBlogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [blogs, setBlogs] = useState(getInitialPosts);
+  const [visibleCount, setVisibleCount] = useState(6);
+  const [searchParams] = useSearchParams();
+
+  const searchQuery = searchParams.get("q") || "";
+  const categoryFilter = searchParams.get("category") || "";
 
   useEffect(() => {
-    fetchBlogs();
+    const blogsRef = collection(db, "blogs");
+
+    const unsubscribe = onSnapshot(
+      blogsRef,
+      (snapshot) => {
+        let localCustom = [];
+        try {
+          localCustom = JSON.parse(
+            localStorage.getItem("daily_news_custom_blogs") || "[]"
+          );
+        } catch (e) {
+          localCustom = [];
+        }
+
+        if (!snapshot.empty) {
+          const firestoreDocs = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          }));
+
+          const merged = combineBlogsConsistently(firestoreDocs, localCustom);
+          setBlogs(merged);
+        } else {
+          // If Firestore is empty, keep full curated list and seed in background
+          setBlogs(combineBlogsConsistently([], localCustom));
+          seedInitialBlogsIfEmpty().catch(() => {});
+        }
+      },
+      (error) => {
+        console.warn("Firestore snapshot listener error, using robust editorial list:", error);
+      }
+    );
+
+    return () => unsubscribe();
   }, []);
 
-  const fetchBlogs = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      // Query blogs from Firestore ordered by createdAt descending (newest first)
-      const blogsRef = collection(db, "blogs");
-      let snapshot;
-      try {
-        const q = query(blogsRef, orderBy("createdAt", "desc"));
-        snapshot = await getDocs(q);
-      } catch (orderErr) {
-        // Fallback without orderBy if index is building or items have null createdAt
-        snapshot = await getDocs(blogsRef);
-      }
-
-      const blogsList = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      // In case fallback was used, sort manually by date
-      blogsList.sort((a, b) => {
-        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-        return timeB - timeA;
-      });
-
-      setBlogs(blogsList);
-    } catch (err) {
-      console.error("Error fetching blogs:", err);
-      setError("Unable to load blogs. Please try again.");
-    } finally {
-      setLoading(false);
+  // Filter based on search query or category
+  const filteredBlogs = blogs.filter((blog) => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = blog.title?.toLowerCase().includes(q);
+      const matchDesc = blog.description?.toLowerCase().includes(q);
+      if (!matchTitle && !matchDesc) return false;
     }
+    if (categoryFilter) {
+      const c = categoryFilter.toLowerCase();
+      const matchCat = blog.category?.toLowerCase().includes(c);
+      if (!matchCat) return false;
+    }
+    return true;
+  });
+
+  // Hero post: Always the newest story (blogs[0])
+  const heroPost = filteredBlogs.length > 0 ? filteredBlogs[0] : null;
+
+  // Latest stories: Follows hero post (or take all if filtered)
+  const latestStories =
+    filteredBlogs.length > 1 ? filteredBlogs.slice(1) : filteredBlogs;
+
+  // Staff picks: Always takes items 2 through 6 so there are always 4 picks
+  const staffPicks =
+    blogs.length > 4 ? blogs.slice(2, 6) : blogs.slice(0, 4);
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => prev + 3);
   };
 
   return (
-    <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
-      {/* Page Title & Intro */}
-      <div className="mb-10 text-center sm:text-left">
-        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
-          Latest Blog Posts
-        </h1>
-        <p className="text-gray-600 text-base">
-          Read the latest articles, guides, and updates.
-        </p>
-      </div>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="text-center py-16 text-gray-600">
-          <p className="text-lg">Loading blogs...</p>
+    <main className="min-h-screen bg-white pb-12">
+      {/* Search / Filter Notification Banner */}
+      {(searchQuery || categoryFilter) && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <div className="bg-gray-50 border border-gray-200 px-4 py-3 text-sm flex items-center justify-between">
+            <p className="text-gray-700">
+              Showing results for:{" "}
+              <strong className="text-gray-900">
+                {searchQuery ? `"${searchQuery}"` : `Category: ${categoryFilter}`}
+              </strong>{" "}
+              ({filteredBlogs.length} {filteredBlogs.length === 1 ? "story" : "stories"} found)
+            </p>
+            <a
+              href="/"
+              className="text-xs font-semibold text-[#f84560] hover:underline"
+            >
+              Clear filter
+            </a>
+          </div>
         </div>
       )}
 
-      {/* Error State */}
-      {error && !loading && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6 text-center">
-          <p>{error}</p>
-          <button
-            onClick={fetchBlogs}
-            className="mt-2 text-sm text-red-700 underline font-medium hover:text-red-800"
-          >
-            Retry
-          </button>
-        </div>
+      {/* 1. Hero Feature Section (Displays newest/featured blog) */}
+      {!searchQuery && !categoryFilter && heroPost && (
+        <HeroSection blog={heroPost} />
       )}
 
-      {/* Empty State */}
-      {!loading && !error && blogs.length === 0 && (
-        <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded-lg p-8">
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">No blogs found</h2>
-          <p className="text-gray-600 max-w-md mx-auto mb-4">
-            There are no blog posts published yet. Log in to the dashboard to create your first blog post!
-          </p>
+      {/* 2. Latest Stories Section */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+        <div className="mb-10 text-left">
+          <span className="block text-[11px] font-bold tracking-[0.22em] text-gray-800 uppercase mb-1.5">
+            BROWSE AND READ THE LATEST STUFF
+          </span>
+          <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
+            Latest Stories
+          </h2>
         </div>
-      )}
 
-      {/* Blogs Grid */}
-      {!loading && !error && blogs.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {blogs.map((blog) => (
+        {/* Empty State when search returns 0 results */}
+        {filteredBlogs.length === 0 && (
+          <div className="py-16 text-center bg-gray-50 border border-gray-100 p-8 my-6">
+            <h3 className="font-heading text-lg font-bold text-gray-800 mb-2">
+              No matching stories found
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Try a different search term or browse all articles.
+            </p>
+            <a
+              href="/"
+              className="inline-block bg-[#f84560] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-full"
+            >
+              View All Stories
+            </a>
+          </div>
+        )}
+
+        {/* 3-Column Stories Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
+          {latestStories.slice(0, visibleCount).map((blog) => (
             <BlogCard key={blog.id} blog={blog} />
           ))}
         </div>
+
+        {/* "MORE POSTS" Button */}
+        {latestStories.length > visibleCount && (
+          <div className="mt-14 text-center">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white font-heading font-bold text-[11px] tracking-[0.16em] uppercase px-9 py-3.5 rounded-full shadow-sm hover:shadow transition-all cursor-pointer"
+            >
+              MORE POSTS
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* 3. Staff's Picks Section */}
+      {!searchQuery && !categoryFilter && (
+        <StaffPicksSection blogs={staffPicks} />
       )}
     </main>
   );

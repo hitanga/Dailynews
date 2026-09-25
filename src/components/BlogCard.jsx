@@ -1,73 +1,91 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { Camera } from "lucide-react";
+import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
 
-/**
- * Format timestamp or date to human readable format
- */
-export const formatDate = (timestamp) => {
-  if (!timestamp) return "";
+export const formatDate = (timestamp, fallbackDate) => {
+  if (fallbackDate) return fallbackDate;
+  if (!timestamp) return "Recent Story";
   try {
-    // Firestore Timestamp object has toDate()
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString("en-US", {
-      year: "numeric",
       month: "long",
       day: "numeric",
+      year: "numeric",
     });
   } catch {
-    return "";
+    return "Recent Story";
   }
 };
 
 export default function BlogCard({ blog }) {
-  const [imageError, setImageError] = useState(false);
+  // If url is known broken url or missing, start with heroCityStreetImg
+  const isBadUrl = !blog.imageUrl || blog.imageUrl.includes("photo-1477959858617-67f30bc75b82");
+  const [imgSrc, setImgSrc] = useState(isBadUrl ? heroCityStreetImg : blog.imageUrl);
 
-  // Short description snippet
-  const snippet =
-    blog.description && blog.description.length > 150
-      ? blog.description.substring(0, 150) + "..."
-      : blog.description;
+  const dateText = formatDate(blog.createdAt, blog.dateString);
+  const categoryText = blog.category || "Featured, Trending";
 
   return (
-    <article className="bg-white border border-gray-200 rounded-lg overflow-hidden flex flex-col">
-      {/* Blog Image */}
-      <div className="w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
-        {blog.imageUrl && !imageError ? (
+    <article className="flex flex-col group">
+      {/* Image Container with Gutenverse Architectural Corner Motif */}
+      <div className="relative w-full aspect-[16/10] bg-gray-100 overflow-hidden">
+        <Link to={`/blog/${blog.id}`} className="block w-full h-full">
           <img
-            src={blog.imageUrl}
+            src={imgSrc}
             alt={blog.title}
-            className="w-full h-full object-cover"
-            onError={() => setImageError(true)}
+            className="w-full h-full object-cover group-hover:scale-104 transition-transform duration-500 ease-out"
+            onError={() => {
+              if (imgSrc !== heroCityStreetImg) {
+                setImgSrc(heroCityStreetImg);
+              }
+            }}
           />
-        ) : (
-          <div className="text-gray-400 text-sm px-4 text-center">
-            {imageError ? "Unable to load image" : "No image available"}
+        </Link>
+
+        {/* Camera Badge (top right) */}
+        {blog.hasCameraBadge && (
+          <div className="absolute top-0 right-0 bg-[#f84560] text-white p-2">
+            <Camera className="w-3.5 h-3.5" />
           </div>
         )}
+
+        {/* Bottom Right Corner Tab Motif (distinctive Gutenverse element) */}
+        <div className="absolute bottom-0 right-0 w-6 h-6 bg-[#22252a] pointer-events-none" />
       </div>
 
-      {/* Content */}
-      <div className="p-5 flex flex-col flex-grow">
-        {blog.createdAt && (
-          <span className="text-xs text-gray-500 mb-2">
-            {formatDate(blog.createdAt)}
-          </span>
-        )}
+      {/* Card Content */}
+      <div className="pt-4 flex flex-col flex-grow">
+        {/* Title */}
+        <h3 className="font-heading text-[17px] sm:text-[18px] font-bold text-gray-900 leading-snug mb-2 group-hover:text-[#f84560] transition-colors line-clamp-2">
+          <Link to={`/blog/${blog.id}`}>
+            {blog.title}
+          </Link>
+        </h3>
 
-        <h2 className="text-xl font-semibold text-gray-900 mb-2 line-clamp-2">
-          {blog.title}
-        </h2>
+        {/* Meta: Date & Category */}
+        <div className="text-[10px] font-bold tracking-[0.16em] text-gray-400 uppercase flex items-center gap-1.5 flex-wrap">
+          <span>{dateText}</span>
+          <span>•</span>
+          <span className="text-gray-600">{categoryText}</span>
+        </div>
 
-        <p className="text-gray-600 text-sm mb-5 flex-grow line-clamp-3">
-          {snippet}
+        {/* Red / Coral Accent Line */}
+        <div className="w-6 h-[2px] bg-[#f84560] my-2.5" />
+
+        {/* Excerpt */}
+        <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed mb-3 line-clamp-3 flex-grow">
+          {blog.description}
         </p>
 
+        {/* Read More Link */}
         <div>
           <Link
             to={`/blog/${blog.id}`}
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded transition-colors"
+            className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold tracking-widest uppercase text-[#f84560] hover:text-[#d62844] transition-colors"
           >
-            Read More
+            <span>READ MORE</span>
+            <span>→</span>
           </Link>
         </div>
       </div>

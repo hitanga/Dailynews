@@ -60,13 +60,21 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
-      <div className="max-w-lg w-full bg-white border border-gray-200 rounded-lg p-8 shadow-sm text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          Admin Login
+    <div className="min-h-[calc(100vh-6rem)] flex items-center justify-center px-4 py-16 bg-gray-50/50">
+      <div className="max-w-lg w-full bg-white border border-gray-200 rounded p-8 sm:p-10 shadow-lg text-center">
+        {/* Brand */}
+        <span className="font-heading font-black tracking-tight text-3xl sm:text-4xl text-gray-900 uppercase block mb-1">
+          DAILY NEWS
+        </span>
+        <span className="block text-[10px] font-semibold tracking-[0.22em] text-gray-500 uppercase mb-6">
+          MULTIPURPOSE MAGAZINE AND BLOG
+        </span>
+
+        <h1 className="font-heading text-xl font-bold text-gray-900 mb-2">
+          Editorial Sign In
         </h1>
-        <p className="text-sm text-gray-600 mb-6">
-          Sign in or create an account with Google to access the blog dashboard.
+        <p className="text-xs text-gray-600 mb-8">
+          Sign in with your Google account to manage articles, publish content, and edit stories.
         </p>
 
         {/* Detailed Unauthorized Domain Resolution Card */}

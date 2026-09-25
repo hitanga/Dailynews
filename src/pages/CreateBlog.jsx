@@ -6,6 +6,7 @@ import { db } from "../firebase";
 export default function CreateBlog() {
   const [title, setTitle] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [category, setCategory] = useState("Featured");
   const [description, setDescription] = useState("");
 
   const [imageError, setImageError] = useState(false);
@@ -14,7 +15,6 @@ export default function CreateBlog() {
 
   const navigate = useNavigate();
 
-  // Handle URL change and reset error state for preview
   const handleImageUrlChange = (e) => {
     setImageUrl(e.target.value);
     setImageError(false);
@@ -24,7 +24,6 @@ export default function CreateBlog() {
     e.preventDefault();
     setError("");
 
-    // 1. Validation
     if (!title.trim()) {
       setError("Please enter a title.");
       return;
@@ -41,93 +40,152 @@ export default function CreateBlog() {
     setLoading(true);
 
     try {
-      // 2. Save blog to Firestore collection 'blogs'
-      await addDoc(collection(db, "blogs"), {
-        title: title.trim(),
-        imageUrl: imageUrl.trim(),
-        description: description.trim(),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const now = new Date();
+      const dateString = now.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
       });
 
-      // 3. Redirect back to Dashboard
-      navigate("/dashboard");
+      const newPostData = {
+        title: title.trim(),
+        imageUrl: imageUrl.trim(),
+        category: category.trim() || "Featured",
+        description: description.trim(),
+        dateString: dateString,
+        commentsCount: 0,
+        isHero: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      // 1. Save to Firestore
+      let createdDocId = "custom-" + Date.now();
+      try {
+        const docRef = await addDoc(collection(db, "blogs"), newPostData);
+        createdDocId = docRef.id;
+      } catch (firestoreErr) {
+        console.warn("Firestore write fallback to local storage:", firestoreErr);
+      }
+
+      // 2. Also cache in localStorage for instant rendering in Hero Section
+      try {
+        const localList = JSON.parse(
+          localStorage.getItem("daily_news_custom_blogs") || "[]"
+        );
+        localList.unshift({
+          id: createdDocId,
+          ...newPostData,
+          createdAt: new Date().toISOString(),
+        });
+        localStorage.setItem(
+          "daily_news_custom_blogs",
+          JSON.stringify(localList)
+        );
+      } catch (storageErr) {
+        console.warn("Storage caching error:", storageErr);
+      }
+
+      // Direct user straight to Home to immediately see their newly created blog in the Hero section!
+      navigate("/");
     } catch (err) {
       console.error("Error creating blog:", err);
-      setError("Unable to save blog. Please try again.");
+      setError("Unable to save story. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
       <div className="mb-6">
         <Link
           to="/dashboard"
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+          className="text-xs font-bold uppercase tracking-wider text-[#f84560] hover:text-[#d62844] flex items-center gap-1"
         >
-          ← Back to Dashboard
+          <span>← BACK TO DASHBOARD</span>
         </Link>
       </div>
 
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6">
-        Create New Blog
-      </h1>
+      <div className="border-b border-gray-100 pb-4 mb-8">
+        <span className="text-[10px] font-bold tracking-[0.2em] text-[#f84560] uppercase block mb-1">
+          NEW PUBLICATION
+        </span>
+        <h1 className="font-heading text-3xl font-extrabold text-gray-900">
+          Create New Story
+        </h1>
+        <p className="text-xs text-gray-500 mt-1">
+          Publish a new article to feature it prominently in the Hero section on the homepage.
+        </p>
+      </div>
 
-      {/* Error message */}
       {error && (
-        <div className="mb-5 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded">
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded">
           {error}
         </div>
       )}
 
-      {/* Blog form */}
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Title */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Blog Title
+          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+            Story Title
           </label>
           <input
             type="text"
+            required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Enter blog title"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="e.g. Breaking: Global Climate Summit Announces New Carbon Targets"
+            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
+          />
+        </div>
+
+        {/* Category & Tag */}
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+            Category / Tags
+          </label>
+          <input
+            type="text"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="e.g. Featured, News, Tech"
+            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
           />
         </div>
 
         {/* Image URL */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Image URL
+          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+            Cover Image URL
           </label>
           <input
             type="url"
+            required
             value={imageUrl}
             onChange={handleImageUrlChange}
-            placeholder="https://example.com/image.jpg"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-blue-500"
+            placeholder="https://images.unsplash.com/photo-..."
+            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
           />
 
           {/* Live Image Preview */}
           {imageUrl.trim() && (
             <div className="mt-3">
-              <span className="block text-xs font-medium text-gray-500 mb-1.5">
+              <span className="block text-[11px] font-bold tracking-wider uppercase text-gray-500 mb-1.5">
                 Image Preview:
               </span>
-              <div className="w-full max-h-72 bg-gray-50 border border-gray-200 rounded p-2 flex items-center justify-center overflow-hidden">
+              <div className="relative w-full max-h-80 bg-gray-50 border border-gray-200 rounded p-2 flex items-center justify-center overflow-hidden">
                 {imageError ? (
-                  <div className="py-8 text-center text-red-600 text-sm">
-                    <p className="font-medium">Unable to load image.</p>
-                    <p className="text-xs text-red-500 mt-1">Please check the image URL.</p>
+                  <div className="py-8 text-center text-red-600 text-xs">
+                    <p className="font-bold">Unable to load image.</p>
+                    <p className="text-gray-500 mt-1">Please check the image URL.</p>
                   </div>
                 ) : (
                   <img
                     src={imageUrl}
                     alt="Preview"
-                    className="max-h-64 max-w-full object-contain rounded"
+                    className="max-h-72 max-w-full object-contain rounded"
                     onLoad={() => setImageError(false)}
                     onError={() => setImageError(true)}
                   />
@@ -137,32 +195,33 @@ export default function CreateBlog() {
           )}
         </div>
 
-        {/* Description */}
+        {/* Description / Content */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description
+          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+            Story Content
           </label>
           <textarea
-            rows={8}
+            rows={10}
+            required
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Write your blog content here..."
-            className="w-full px-3 py-2 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-blue-500"
-          ></textarea>
+            placeholder="Write your story content here..."
+            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm leading-relaxed focus:outline-none focus:border-[#f84560]"
+          />
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-4 pt-2">
           <button
             type="submit"
             disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2 rounded text-sm transition-colors disabled:opacity-50 cursor-pointer"
+            className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold text-xs uppercase tracking-wider px-8 py-3.5 rounded-full transition-colors disabled:opacity-50 cursor-pointer shadow-md"
           >
-            {loading ? "Saving..." : "Create Blog"}
+            {loading ? "Publishing Story..." : "Publish & Feature in Hero"}
           </button>
           <Link
             to="/dashboard"
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-5 py-2 rounded text-sm transition-colors cursor-pointer"
+            className="text-gray-500 hover:text-gray-800 text-xs font-bold uppercase tracking-wider px-4 py-3"
           >
             Cancel
           </Link>

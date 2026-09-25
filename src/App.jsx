@@ -2,12 +2,14 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // Pages
 import Home from "./pages/Home";
 import BlogDetails from "./pages/BlogDetails";
 import Login from "./pages/Login";
+import Contact from "./pages/Contact";
 import Dashboard from "./pages/Dashboard";
 import CreateBlog from "./pages/CreateBlog";
 import EditBlog from "./pages/EditBlog";
@@ -26,6 +28,7 @@ export default function App() {
               {/* Public Routes */}
               <Route path="/" element={<Home />} />
               <Route path="/blog/:id" element={<BlogDetails />} />
+              <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />
 
               {/* Protected Admin Routes */}
@@ -58,6 +61,9 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
+
+          {/* Gutenverse Magazine Footer */}
+          <Footer />
         </div>
       </Router>
     </AuthProvider>
