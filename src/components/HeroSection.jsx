@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import heroFallbackImg from "../assets/images/hero_city_street_1790345223275.jpg";
+import { stripHtml } from "../utils/contentFormatter";
 
 export default function HeroSection({ blog }) {
   if (!blog) return null;
@@ -86,7 +87,7 @@ export default function HeroSection({ blog }) {
 
             {/* Excerpt */}
             <p className="text-xs sm:text-[13.5px] text-gray-600 leading-relaxed line-clamp-3">
-              {blog.description}
+              {stripHtml(blog.description)}
             </p>
           </div>
         </div>

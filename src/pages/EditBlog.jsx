@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { DEFAULT_POSTS } from "../utils/seedData";
+import RichTextEditor from "../components/RichTextEditor";
 
 export default function EditBlog() {
   const { id } = useParams();
@@ -190,7 +191,7 @@ export default function EditBlog() {
           Edit Story
         </h1>
         <p className="text-xs text-gray-500 mt-1">
-          Modify the title, category, cover photo, or narrative body.
+          Modify the title, category, cover photo, font styling, colors, or narrative body.
         </p>
       </div>
 
@@ -204,7 +205,7 @@ export default function EditBlog() {
         {/* Title */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Story Title
+            Story Title *
           </label>
           <input
             type="text"
@@ -231,7 +232,7 @@ export default function EditBlog() {
         {/* Image URL */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Cover Image URL
+            Cover Image URL *
           </label>
           <input
             type="url"
@@ -267,17 +268,15 @@ export default function EditBlog() {
           )}
         </div>
 
-        {/* Description / Body */}
+        {/* Story Body & Rich Text Formatting */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Story Body
+            Story Body & Formatting *
           </label>
-          <textarea
-            rows={10}
-            required
+          <RichTextEditor
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm leading-relaxed focus:outline-none focus:border-[#f84560]"
+            onChange={(content) => setDescription(content)}
+            placeholder="Write your story narrative here. Use the toolbar to style bold, italic, font sizes, colors, and hyperlinks..."
           />
         </div>
 

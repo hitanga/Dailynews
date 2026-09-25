@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Camera } from "lucide-react";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
+import { stripHtml } from "../utils/contentFormatter";
 
 export const formatDate = (timestamp, fallbackDate) => {
   if (fallbackDate) return fallbackDate;
@@ -75,7 +76,7 @@ export default function BlogCard({ blog }) {
 
         {/* Excerpt */}
         <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed mb-3 line-clamp-3 flex-grow">
-          {blog.description}
+          {stripHtml(blog.description)}
         </p>
 
         {/* Read More Link */}

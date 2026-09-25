@@ -2,15 +2,15 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
+import RichTextEditor from "../components/RichTextEditor";
 
 export default function CreateBlog() {
   const [title, setTitle] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [category, setCategory] = useState("Featured");
   const [description, setDescription] = useState("");
-
-  const [imageError, setImageError] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
@@ -25,15 +25,15 @@ export default function CreateBlog() {
     setError("");
 
     if (!title.trim()) {
-      setError("Please enter a title.");
+      setError("Please enter a title for the story.");
       return;
     }
     if (!imageUrl.trim()) {
-      setError("Please enter an image URL.");
+      setError("Please provide a cover image URL.");
       return;
     }
     if (!description.trim()) {
-      setError("Please enter a description.");
+      setError("Please enter the narrative content for your story.");
       return;
     }
 
@@ -68,7 +68,7 @@ export default function CreateBlog() {
         console.warn("Firestore write fallback to local storage:", firestoreErr);
       }
 
-      // 2. Also cache in localStorage for instant rendering in Hero Section
+      // 2. Also cache in localStorage for instant rendering in Hero Section and Dashboard
       try {
         const localList = JSON.parse(
           localStorage.getItem("daily_news_custom_blogs") || "[]"
@@ -129,7 +129,7 @@ export default function CreateBlog() {
         {/* Title */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Story Title
+            Story Title *
           </label>
           <input
             type="text"
@@ -150,7 +150,7 @@ export default function CreateBlog() {
             type="text"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            placeholder="e.g. Featured, News, Tech"
+            placeholder="e.g. Featured, News, Tech, Business"
             className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm focus:outline-none focus:border-[#f84560]"
           />
         </div>
@@ -158,7 +158,7 @@ export default function CreateBlog() {
         {/* Image URL */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Cover Image URL
+            Cover Image URL *
           </label>
           <input
             type="url"
@@ -195,18 +195,15 @@ export default function CreateBlog() {
           )}
         </div>
 
-        {/* Description / Content */}
+        {/* Rich Story Content */}
         <div>
           <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-            Story Content
+            Story Body & Formatting *
           </label>
-          <textarea
-            rows={10}
-            required
+          <RichTextEditor
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Write your story content here..."
-            className="w-full px-3.5 py-2.5 border border-gray-300 rounded text-gray-900 text-sm leading-relaxed focus:outline-none focus:border-[#f84560]"
+            onChange={(content) => setDescription(content)}
+            placeholder="Write your story content here. Use the toolbar above to style bold, italic, underline, font size, colors, lists, and hyperlinks..."
           />
         </div>
 

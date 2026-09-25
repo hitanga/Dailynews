@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { formatDate } from "./BlogCard";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
+import { stripHtml } from "../utils/contentFormatter";
 
 export default function StaffPicksSection({ blogs }) {
   if (!blogs || blogs.length === 0) return null;
@@ -60,7 +61,7 @@ export default function StaffPicksSection({ blogs }) {
             </h3>
 
             <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
-              {mainPick.description}
+              {stripHtml(mainPick.description)}
             </p>
           </div>
         )}
@@ -92,7 +93,7 @@ export default function StaffPicksSection({ blogs }) {
                 </h4>
 
                 <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
-                  {pick.description}
+                  {stripHtml(pick.description)}
                 </p>
               </div>
             </article>

@@ -4,6 +4,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { DEFAULT_POSTS } from "../utils/seedData";
 import { formatDate } from "../components/BlogCard";
+import { formatContentToHtml } from "../utils/contentFormatter";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
 
 export default function BlogDetails() {
@@ -19,7 +20,7 @@ export default function BlogDetails() {
       setError("");
 
       try {
-        // 1. First check local storage custom posts
+        // 1. First check local storage custom blogs
         try {
           const localPosts = JSON.parse(
             localStorage.getItem("daily_news_custom_blogs") || "[]"
@@ -35,43 +36,48 @@ export default function BlogDetails() {
             setLoading(false);
             return;
           }
-        } catch (e) {
-          // continue
-        }
+        } catch (e) {}
 
         // 2. Check Firestore
-        const blogRef = doc(db, "blogs", id);
-        const docSnap = await getDoc(blogRef);
+        try {
+          const blogRef = doc(db, "blogs", id);
+          const docSnap = await getDoc(blogRef);
 
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          const loadedBlog = { id: docSnap.id, ...data };
-          setBlog(loadedBlog);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const loadedBlog = { id: docSnap.id, ...data };
+            setBlog(loadedBlog);
+            setImgSrc(
+              !loadedBlog.imageUrl || loadedBlog.imageUrl.includes("photo-1477959858617-67f30bc75b82")
+                ? heroCityStreetImg
+                : loadedBlog.imageUrl
+            );
+            setLoading(false);
+            return;
+          }
+        } catch (firestoreErr) {
+          console.warn("Firestore fetch error:", firestoreErr);
+        }
+
+        // 3. Fallback to default sample posts
+        const defaultMatch = DEFAULT_POSTS.find(
+          (p, idx) =>
+            `post-${idx}` === id ||
+            p.title.toLowerCase().includes(id.toLowerCase())
+        );
+
+        if (defaultMatch) {
+          setBlog({ id, ...defaultMatch });
           setImgSrc(
-            !loadedBlog.imageUrl || loadedBlog.imageUrl.includes("photo-1477959858617-67f30bc75b82")
+            !defaultMatch.imageUrl || defaultMatch.imageUrl.includes("photo-1477959858617-67f30bc75b82")
               ? heroCityStreetImg
-              : loadedBlog.imageUrl
+              : defaultMatch.imageUrl
           );
         } else {
-          // 3. Fallback to default posts
-          const defaultMatch = DEFAULT_POSTS.find(
-            (p, idx) =>
-              `post-${idx}` === id ||
-              p.title.toLowerCase().includes(id.toLowerCase())
-          );
-          if (defaultMatch) {
-            setBlog({ id, ...defaultMatch });
-            setImgSrc(
-              !defaultMatch.imageUrl || defaultMatch.imageUrl.includes("photo-1477959858617-67f30bc75b82")
-                ? heroCityStreetImg
-                : defaultMatch.imageUrl
-            );
-          } else {
-            setError("Story not found.");
-          }
+          setError("Story not found.");
         }
       } catch (err) {
-        console.warn("Firestore fetch issue, checking fallback defaults:", err);
+        console.warn("Error fetching story details:", err);
         const defaultMatch =
           DEFAULT_POSTS.find((p, idx) => `post-${idx}` === id) || DEFAULT_POSTS[0];
         setBlog({ id, ...defaultMatch });
@@ -121,6 +127,7 @@ export default function BlogDetails() {
 
   const dateText = formatDate(blog.createdAt, blog.dateString);
   const categoryText = blog.category || "Featured, Lifestyle";
+  const formattedHtml = formatContentToHtml(blog.description);
 
   return (
     <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -152,7 +159,7 @@ export default function BlogDetails() {
       </h1>
 
       {/* Hero Photograph with Gutenverse Architectural Corner */}
-      <div className="relative w-full aspect-[16/10] sm:aspect-[21/10] bg-gray-100 overflow-hidden mb-10 border border-gray-100">
+      <div className="relative w-full aspect-[16/10] sm:aspect-[21/10] bg-gray-100 overflow-hidden mb-10 border border-gray-100 shadow-xs">
         <img
           src={imgSrc}
           alt={blog.title}
@@ -163,14 +170,11 @@ export default function BlogDetails() {
         <div className="absolute bottom-0 right-0 w-8 h-8 bg-[#22252a]" />
       </div>
 
-      {/* Story Content / Editorial Body */}
-      <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed space-y-6 text-[16px] sm:text-[18px]">
-        {blog.description?.split("\n\n").map((paragraph, idx) => (
-          <p key={idx} className="leading-relaxed">
-            {paragraph}
-          </p>
-        ))}
-      </div>
+      {/* Story Content / Editorial Body with Rich Formatting Support */}
+      <div
+        className="article-rendered-content text-gray-800 leading-relaxed text-[16px] sm:text-[18px]"
+        dangerouslySetInnerHTML={{ __html: formattedHtml }}
+      />
     </article>
   );
 }
