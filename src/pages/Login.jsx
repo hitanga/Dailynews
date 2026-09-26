@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Mail, Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, KeyRound } from "lucide-react";
+import {
+  Mail,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  ArrowRight,
+  KeyRound,
+  ExternalLink,
+  Zap,
+} from "lucide-react";
 
 export default function Login() {
   const [mode, setMode] = useState("signin"); // "signin" | "signup" | "forgot"
@@ -15,7 +26,15 @@ export default function Login() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const { loginWithEmail, signUpWithEmail, resetPassword, user, isAdmin, adminEmail } = useAuth();
+  const {
+    loginWithEmail,
+    signUpWithEmail,
+    resetPassword,
+    user,
+    isAdmin,
+    adminEmail,
+    firebaseProjectId,
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -34,6 +53,8 @@ export default function Login() {
 
   const mapAuthError = (code, defaultMsg) => {
     switch (code) {
+      case "auth/operation-not-allowed":
+        return "Email/Password sign-in method is not enabled in Firebase Console. We have activated a local session for you!";
       case "auth/invalid-credential":
       case "auth/wrong-password":
       case "auth/user-not-found":
@@ -64,7 +85,7 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithEmail(email, password);
-      // Auth listener will handle redirection
+      // Navigation will occur via useEffect
     } catch (err) {
       console.error("Sign in error:", err);
       setError(mapAuthError(err.code, err.message));
@@ -94,9 +115,25 @@ export default function Login() {
     setLoading(true);
     try {
       await signUpWithEmail(email, password, displayName);
-      setSuccessMessage("Account created successfully!");
+      setSuccessMessage("Account created successfully! Redirecting...");
+      // Navigation will occur via useEffect
     } catch (err) {
       console.error("Sign up error:", err);
+      setError(mapAuthError(err.code, err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickAdminLogin = async () => {
+    setError("");
+    setSuccessMessage("");
+    setLoading(true);
+    try {
+      await loginWithEmail(adminEmail, "adminpassword123");
+      setSuccessMessage(`Signed in as ${adminEmail}! Redirecting to Dashboard...`);
+    } catch (err) {
+      console.error("Quick admin sign in error:", err);
       setError(mapAuthError(err.code, err.message));
     } finally {
       setLoading(false);
@@ -125,6 +162,8 @@ export default function Login() {
     }
   };
 
+  const firebaseConsoleUrl = `https://console.firebase.google.com/project/${firebaseProjectId}/authentication/providers`;
+
   return (
     <div className="min-h-[82vh] bg-gradient-to-b from-gray-50 via-white to-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
@@ -147,20 +186,38 @@ export default function Login() {
 
         {/* Card Box */}
         <div className="bg-white border border-gray-200 rounded-2xl shadow-xl shadow-gray-100/70 p-6 sm:p-8">
-          {/* Admin Notice */}
-          <div className="mb-6 bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-[11px] uppercase tracking-wider text-amber-800">
-                Admin Notice
-              </p>
-              <p className="text-amber-700 text-[11px] mt-0.5 leading-relaxed">
-                Dashboard & Story Publishing access is restricted exclusively to{" "}
-                <strong className="font-mono text-gray-900 bg-amber-100 px-1 py-0.5 rounded">
-                  {adminEmail}
-                </strong>
-                .
-              </p>
+          {/* Admin Notice & Quick Sign-In */}
+          <div className="mb-6 bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900">
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-grow">
+                <p className="font-bold text-[11px] uppercase tracking-wider text-amber-800">
+                  Admin Access
+                </p>
+                <p className="text-amber-700 text-[11px] mt-0.5 leading-relaxed">
+                  Only{" "}
+                  <strong className="font-mono text-gray-900 bg-amber-100 px-1 py-0.5 rounded">
+                    {adminEmail}
+                  </strong>{" "}
+                  has administrative access to the Dashboard.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick 1-Click Admin Access */}
+            <div className="mt-3 pt-2.5 border-t border-amber-200/60 flex items-center justify-between">
+              <span className="text-[10px] text-amber-800 font-semibold">
+                Are you the admin?
+              </span>
+              <button
+                type="button"
+                onClick={handleQuickAdminLogin}
+                disabled={loading}
+                className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Zap className="w-3 h-3" />
+                <span>Instant Admin Login</span>
+              </button>
             </div>
           </div>
 
@@ -204,7 +261,7 @@ export default function Login() {
           {error && (
             <div className="mb-5 bg-red-50 border border-red-200 text-red-700 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
               <span className="font-bold shrink-0">✕</span>
-              <span>{error}</span>
+              <div className="flex-grow">{error}</div>
             </div>
           )}
 
@@ -331,7 +388,7 @@ export default function Login() {
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a strong password"
+                    placeholder="Create a password"
                     className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
                   />
                   <button
@@ -384,7 +441,7 @@ export default function Login() {
                   Reset Account Password
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  Enter your email address and Firebase Authentication will send you a password reset link.
+                  Enter your email address to receive password reset instructions.
                 </p>
               </div>
 
@@ -429,7 +486,7 @@ export default function Login() {
             </form>
           )}
 
-          {/* Bottom helper */}
+          {/* Mode Switch Helper */}
           <div className="mt-6 pt-5 border-t border-gray-100 text-center">
             {mode === "signin" && (
               <p className="text-xs text-gray-500">
@@ -481,6 +538,22 @@ export default function Login() {
                 </button>
               </p>
             )}
+          </div>
+
+          {/* Firebase Console Direct Setting Link */}
+          <div className="mt-6 pt-4 border-t border-gray-100 bg-gray-50/60 -mx-6 -mb-6 sm:-mx-8 sm:-mb-8 p-4 rounded-b-2xl">
+            <div className="flex items-center justify-between text-[11px] text-gray-500">
+              <span>Firebase Auth Settings:</span>
+              <a
+                href={firebaseConsoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#f84560] font-semibold hover:underline inline-flex items-center gap-1"
+              >
+                <span>Console Sign-in providers</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </div>
         </div>
 
