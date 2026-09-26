@@ -6,5 +6,10 @@ service cloud.firestore {
       // Allow read and write for visitors and editorial staff
       allow read, write: if true;
     }
+
+    // Inquiries collection for contact form submissions
+    match /inquiries/{inquiryId} {
+      allow read, write: if true;
+    }
   }
 }
