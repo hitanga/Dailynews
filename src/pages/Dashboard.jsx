@@ -6,10 +6,12 @@ import { useAuth } from "../context/AuthContext";
 import { formatDate } from "../components/BlogCard";
 import { seedInitialBlogsIfEmpty, combineBlogsConsistently } from "../utils/seedData";
 import { stripHtml } from "../utils/contentFormatter";
+import { Mail, Reply, Trash2, Clock, User, AlertCircle, RefreshCw } from "lucide-react";
 
 export default function Dashboard() {
   const [blogs, setBlogs] = useState([]);
-  const [selectedCategoryTab, setSelectedCategoryTab] = useState("all"); // "all" | "news" | "fun-facts"
+  const [inquiries, setInquiries] = useState([]);
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState("all"); // "all" | "news" | "fun-facts" | "inquiries"
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -19,19 +21,22 @@ export default function Dashboard() {
   const [blogToDelete, setBlogToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Inquiry deletion state
+  const [deletingInquiryId, setDeletingInquiryId] = useState(null);
+
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    fetchBlogs();
+    fetchData();
   }, [location]);
 
-  const fetchBlogs = async () => {
+  const fetchData = async () => {
     setLoading(true);
     setError("");
 
-    // 1. Load locally cached / created blogs
+    // 1. Fetch stories
     let localCustom = [];
     try {
       localCustom = JSON.parse(
@@ -41,7 +46,6 @@ export default function Dashboard() {
       localCustom = [];
     }
 
-    // 2. Fetch live Firestore documents
     let firestoreDocs = [];
     try {
       const blogsRef = collection(db, "blogs");
@@ -63,25 +67,54 @@ export default function Dashboard() {
       console.warn("Firestore fetch error, falling back to local posts:", err);
     }
 
-    // 3. Combine custom blogs, firestore documents, and sample stories
     const combined = combineBlogsConsistently(firestoreDocs, localCustom);
     setBlogs(combined);
-    setLoading(false);
-  };
 
-  const handleSeedDefaults = async () => {
-    setIsSeeding(true);
+    // 2. Fetch Contact Inquiries
+    let localInquiries = [];
     try {
-      await seedInitialBlogsIfEmpty();
-      await fetchBlogs();
-      setSuccessMessage("Sample articles synchronized with Firestore!");
-      setTimeout(() => setSuccessMessage(""), 4000);
-    } catch (err) {
-      console.error("Seeding error:", err);
-      setError("Could not populate sample articles.");
-    } finally {
-      setIsSeeding(false);
+      localInquiries = JSON.parse(
+        localStorage.getItem("daily_news_inquiries") || "[]"
+      );
+    } catch (e) {
+      localInquiries = [];
     }
+
+    let firestoreInquiries = [];
+    try {
+      const inqRef = collection(db, "inquiries");
+      let inqSnap;
+      try {
+        const q = query(inqRef, orderBy("createdAt", "desc"));
+        inqSnap = await getDocs(q);
+      } catch (e) {
+        inqSnap = await getDocs(inqRef);
+      }
+
+      if (inqSnap && !inqSnap.empty) {
+        firestoreInquiries = inqSnap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
+      }
+    } catch (inqErr) {
+      console.warn("Inquiries fetch error:", inqErr);
+    }
+
+    // Merge inquiries without duplicates by id or timestamp/email
+    const seen = new Set();
+    const mergedInquiries = [];
+
+    for (const item of [...firestoreInquiries, ...localInquiries]) {
+      const key = item.id || `${item.email}_${item.dateString}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        mergedInquiries.push(item);
+      }
+    }
+
+    setInquiries(mergedInquiries);
+    setLoading(false);
   };
 
   const handleLogout = async () => {
@@ -89,7 +122,24 @@ export default function Dashboard() {
       await logout();
       navigate("/login");
     } catch (err) {
-      console.error("Error logging out:", err);
+      console.error("Logout error:", err);
+    }
+  };
+
+  const handleSeedDefaults = async () => {
+    setIsSeeding(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      await seedInitialBlogsIfEmpty(true);
+      setSuccessMessage("Sample editorial stories populated successfully.");
+      await fetchData();
+    } catch (seedErr) {
+      console.error("Error populating sample articles:", seedErr);
+      setError("Failed to populate stories. Check permissions or network.");
+    } finally {
+      setIsSeeding(false);
     }
   };
 
@@ -97,26 +147,30 @@ export default function Dashboard() {
     if (!blogToDelete) return;
 
     setIsDeleting(true);
+    setError("");
+
     try {
-      // 1. Delete from Firestore
+      // 1. Delete from Firestore if it exists
       try {
-        await deleteDoc(doc(db, "blogs", blogToDelete.id));
+        const blogRef = doc(db, "blogs", blogToDelete.id);
+        await deleteDoc(blogRef);
       } catch (firestoreErr) {
-        console.warn("Firestore delete issue:", firestoreErr);
+        console.warn("Could not delete from Firestore:", firestoreErr);
       }
 
-      // 2. Remove from local custom blogs if present
+      // 2. Remove from custom localStorage posts
       try {
-        const localList = JSON.parse(
+        const customBlogs = JSON.parse(
           localStorage.getItem("daily_news_custom_blogs") || "[]"
         );
-        const updated = localList.filter((b) => b.id !== blogToDelete.id);
-        localStorage.setItem("daily_news_custom_blogs", JSON.stringify(updated));
-      } catch (storageErr) {
-        console.warn("Storage update issue:", storageErr);
-      }
+        const filtered = customBlogs.filter((b) => b.id !== blogToDelete.id);
+        localStorage.setItem(
+          "daily_news_custom_blogs",
+          JSON.stringify(filtered)
+        );
+      } catch (lsErr) {}
 
-      // 3. Save to deleted IDs blacklist
+      // 3. Mark in deleted IDs
       try {
         const delList = JSON.parse(
           localStorage.getItem("daily_news_deleted_ids") || "[]"
@@ -140,6 +194,32 @@ export default function Dashboard() {
     } finally {
       setIsDeleting(false);
       setBlogToDelete(null);
+    }
+  };
+
+  const handleDeleteInquiry = async (inqId) => {
+    setDeletingInquiryId(inqId);
+    try {
+      // Try delete from Firestore
+      try {
+        const docRef = doc(db, "inquiries", inqId);
+        await deleteDoc(docRef);
+      } catch (e) {}
+
+      // Remove from localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem("daily_news_inquiries") || "[]");
+        const filtered = stored.filter((item) => item.id !== inqId);
+        localStorage.setItem("daily_news_inquiries", JSON.stringify(filtered));
+      } catch (e) {}
+
+      setInquiries((prev) => prev.filter((item) => item.id !== inqId));
+      setSuccessMessage("Inquiry removed.");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err) {
+      console.error("Failed to delete inquiry:", err);
+    } finally {
+      setDeletingInquiryId(null);
     }
   };
 
@@ -191,6 +271,13 @@ export default function Dashboard() {
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={fetchData}
+            title="Refresh Stories and Inquiries"
+            className="p-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-colors cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+          <button
             onClick={handleSeedDefaults}
             disabled={isSeeding}
             className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer"
@@ -227,8 +314,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Category Tabs: All Stories | News | Fun Facts */}
-      <div className="flex items-center gap-2 mb-6 border-b border-gray-200 pb-3">
+      {/* Category Tabs: All Stories | News | Fun Facts | Contact Inquiries */}
+      <div className="flex items-center gap-2 mb-6 border-b border-gray-200 pb-3 flex-wrap">
         <button
           type="button"
           onClick={() => setSelectedCategoryTab("all")}
@@ -273,38 +360,49 @@ export default function Dashboard() {
             {funFactsCount}
           </span>
         </button>
+
+        {/* New Tab: Inquiries */}
+        <button
+          type="button"
+          onClick={() => setSelectedCategoryTab("inquiries")}
+          className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+            selectedCategoryTab === "inquiries"
+              ? "bg-[#22252a] text-white shadow-xs"
+              : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+          }`}
+        >
+          <Mail className="w-3.5 h-3.5" />
+          <span>Contact Messages</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedCategoryTab === "inquiries" ? "bg-blue-600 text-white" : "bg-blue-200 text-blue-800"}`}>
+            {inquiries.length}
+          </span>
+        </button>
       </div>
 
       {/* Loading State */}
       {loading && (
         <div className="text-center py-20 text-gray-500">
           <div className="w-8 h-8 border-3 border-[#f84560] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-xs uppercase tracking-wider font-bold">Loading dashboard stories...</p>
+          <p className="text-xs uppercase tracking-wider font-bold">Loading dashboard data...</p>
         </div>
       )}
 
-      {/* Empty State */}
-      {!loading && displayedBlogs.length === 0 && (
-        <div className="text-center py-16 bg-gray-50 border border-gray-200 rounded p-8">
-          <h2 className="font-heading text-xl font-bold text-gray-800 mb-2">
-            No stories in {selectedCategoryTab === "news" ? "Latest News" : selectedCategoryTab === "fun-facts" ? "Fun Facts" : "this view"}
-          </h2>
-          <p className="text-xs text-gray-600 mb-6">
-            Create a new story and select the category to publish it.
+      {/* TAB 1, 2, 3: BLOG POSTS LIST */}
+      {!loading && selectedCategoryTab !== "inquiries" && displayedBlogs.length === 0 && (
+        <div className="text-center py-20 bg-gray-50 border border-gray-200 rounded">
+          <p className="text-gray-500 text-sm mb-4">
+            No stories found in this section.
           </p>
-          <div className="flex justify-center gap-3">
-            <Link
-              to="/dashboard/create"
-              className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white font-bold px-5 py-2 rounded-full text-xs uppercase tracking-wider transition-colors"
-            >
-              Write First Story
-            </Link>
-          </div>
+          <Link
+            to="/dashboard/create"
+            className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white px-5 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition-colors"
+          >
+            Create Your First Story
+          </Link>
         </div>
       )}
 
-      {/* Blog Posts List */}
-      {!loading && displayedBlogs.length > 0 && (
+      {!loading && selectedCategoryTab !== "inquiries" && displayedBlogs.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
             <span>
@@ -414,7 +512,99 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* TAB 4: CONTACT INQUIRIES LIST */}
+      {!loading && selectedCategoryTab === "inquiries" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+            <span>Incoming Contact Form Inquiries ({inquiries.length})</span>
+            <span className="text-[11px] font-mono lowercase text-gray-500">
+              Forwarded to: championhoney@gmail.com
+            </span>
+          </div>
+
+          {inquiries.length === 0 ? (
+            <div className="text-center py-20 bg-gray-50 border border-gray-200 rounded-xl">
+              <Mail className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+              <p className="text-gray-500 text-sm font-medium">No contact messages received yet.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Submissions from the public Contact page will appear here and in your inbox.
+              </p>
+            </div>
+          ) : (
+            inquiries.map((inq) => {
+              const replyUrl = `mailto:${inq.email}?subject=${encodeURIComponent(
+                `Re: ${inq.subject}`
+              )}&body=${encodeURIComponent(
+                `Hi ${inq.name},\n\nThank you for reaching out to Daily News.\n\n---\nOriginal Message:\n${inq.message}`
+              )}`;
+
+              return (
+                <div
+                  key={inq.id || inq.createdAt}
+                  className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 transition-colors shadow-xs space-y-3"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-[#f84560]/10 text-[#f84560] flex items-center justify-center font-bold text-xs uppercase">
+                        {inq.name ? inq.name[0] : "U"}
+                      </div>
+                      <div>
+                        <span className="font-heading font-bold text-sm text-gray-900 block leading-tight">
+                          {inq.name}
+                        </span>
+                        <a
+                          href={`mailto:${inq.email}`}
+                          className="text-xs text-[#f84560] hover:underline font-mono"
+                        >
+                          {inq.email}
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      <span className="text-[11px] text-gray-400 font-medium flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        <span>{inq.dateString || "Recent"}</span>
+                      </span>
+                      <a
+                        href={replyUrl}
+                        className="inline-flex items-center gap-1 bg-[#f84560] hover:bg-[#e0344f] text-white text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors shadow-xs"
+                      >
+                        <Reply className="w-3.5 h-3.5" />
+                        <span>Reply</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteInquiry(inq.id)}
+                        disabled={deletingInquiryId === inq.id}
+                        className="text-gray-400 hover:text-red-600 p-1.5 transition-colors cursor-pointer"
+                        title="Delete Inquiry"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-0.5">
+                      Subject
+                    </span>
+                    <h3 className="text-sm font-bold text-gray-800">
+                      {inq.subject}
+                    </h3>
+                  </div>
+
+                  <div className="bg-gray-50 border border-gray-100 rounded-lg p-3.5 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
+                    {inq.message}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Delete Story Confirmation Modal */}
       {blogToDelete && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded max-w-md w-full p-6 shadow-2xl border border-gray-200">
