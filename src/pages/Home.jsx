@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams, useLocation, Link } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 import {
   seedInitialBlogsIfEmpty,
   combineBlogsConsistently,
@@ -30,6 +31,7 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(6);
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const { isAdmin } = useAuth();
 
   const searchQuery = searchParams.get("q") || "";
   const categoryFilter = searchParams.get("category") || "";
@@ -133,12 +135,14 @@ export default function Home() {
               <span className="text-xs font-bold text-gray-500 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
                 {displayedFunFacts.length} {displayedFunFacts.length === 1 ? "Fun Fact" : "Fun Facts"} Published
               </span>
-              <Link
-                to="/dashboard/create"
-                className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider px-4 py-1.5 rounded-full transition-colors shadow-xs"
-              >
-                + Add Fun Fact
-              </Link>
+              {isAdmin && (
+                <Link
+                  to="/dashboard/create"
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase tracking-wider px-4 py-1.5 rounded-full transition-colors shadow-xs"
+                >
+                  + Add Fun Fact
+                </Link>
+              )}
             </div>
           </div>
         </section>
@@ -151,14 +155,16 @@ export default function Home() {
               No Fun Facts Found
             </h3>
             <p className="text-xs text-gray-500 mb-6">
-              Create a new story and select the <strong>Fun Facts</strong> category in the dashboard to feature it here.
+              Check back soon for new trivia, discoveries, and oddities.
             </p>
-            <Link
-              to="/dashboard/create"
-              className="inline-block bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-full shadow-sm"
-            >
-              Write First Fun Fact
-            </Link>
+            {isAdmin && (
+              <Link
+                to="/dashboard/create"
+                className="inline-block bg-amber-500 hover:bg-amber-600 text-white px-6 py-2.5 text-xs font-bold uppercase tracking-wider rounded-full shadow-sm"
+              >
+                Write First Fun Fact
+              </Link>
+            )}
           </div>
         )}
 
@@ -263,12 +269,14 @@ export default function Home() {
               <span className="text-xs font-bold text-gray-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-full">
                 {displayedNews.length} {displayedNews.length === 1 ? "News Story" : "News Stories"} Published
               </span>
-              <Link
-                to="/dashboard/create"
-                className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold text-xs uppercase tracking-wider px-4 py-1.5 rounded-full transition-colors shadow-xs"
-              >
-                + Write News
-              </Link>
+              {isAdmin && (
+                <Link
+                  to="/dashboard/create"
+                  className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold text-xs uppercase tracking-wider px-4 py-1.5 rounded-full transition-colors shadow-xs"
+                >
+                  + Write News
+                </Link>
+              )}
             </div>
           </div>
         </section>
@@ -294,14 +302,16 @@ export default function Home() {
                 No News Stories Found
               </h3>
               <p className="text-xs text-gray-500 mb-4">
-                Write a new story categorized as "News" in the dashboard.
+                Check back shortly for latest breaking news and editorial reports.
               </p>
-              <Link
-                to="/dashboard/create"
-                className="inline-block bg-[#f84560] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-full"
-              >
-                Create News Story
-              </Link>
+              {isAdmin && (
+                <Link
+                  to="/dashboard/create"
+                  className="inline-block bg-[#f84560] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-full"
+                >
+                  Create News Story
+                </Link>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">

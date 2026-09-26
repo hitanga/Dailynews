@@ -1,7 +1,9 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Footer() {
+  const { isAdmin } = useAuth();
   return (
     <footer className="bg-[#181a1d] text-white pt-16 pb-12 mt-20 border-t border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -66,9 +68,11 @@ export default function Footer() {
           <Link to="/contact" className="hover:text-[#f84560] transition-colors">
             Contact
           </Link>
-          <Link to="/dashboard" className="text-[#f84560] hover:text-white transition-colors">
-            Editorial Dashboard
-          </Link>
+          {isAdmin && (
+            <Link to="/dashboard" className="text-[#f84560] hover:text-white transition-colors">
+              Editorial Dashboard
+            </Link>
+          )}
         </div>
 
         {/* Divider */}
