@@ -4,8 +4,14 @@ import { doc, getDoc, collection, query, where, getDocs } from "firebase/firesto
 import { db } from "../firebase";
 import { DEFAULT_POSTS } from "../utils/seedData";
 import { formatDate } from "../components/BlogCard";
-import { formatContentToHtml, stripHtml } from "../utils/contentFormatter";
+import {
+  formatContentToHtml,
+  stripHtml,
+  getCleanCategory,
+  extractAllTags,
+} from "../utils/contentFormatter";
 import { updatePageSeo, resetPageSeo } from "../utils/seoHelper";
+import ShareButtons from "../components/ShareButtons";
 import { Tag } from "lucide-react";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
 
@@ -81,6 +87,8 @@ export default function BlogDetails() {
               : loadedBlog.imageUrl;
           setImgSrc(finalImage);
 
+          const tagsList = extractAllTags(loadedBlog);
+
           // Update Hidden SEO Metadata (HTML <head> only, hidden from page body)
           updatePageSeo({
             title: loadedBlog.title,
@@ -89,8 +97,8 @@ export default function BlogDetails() {
             metaDescription: loadedBlog.metaDescription,
             imageUrl: finalImage,
             slug: loadedBlog.slug,
-            tags: loadedBlog.tags,
-            category: loadedBlog.category,
+            tags: tagsList,
+            category: getCleanCategory(loadedBlog.category),
             datePublished: loadedBlog.createdAt?.toDate
               ? loadedBlog.createdAt.toDate().toISOString()
               : new Date().toISOString(),
@@ -146,14 +154,14 @@ export default function BlogDetails() {
   }
 
   const dateText = formatDate(blog.createdAt, blog.dateString);
-  const categoryText = blog.category || "Featured";
+  const cleanCategory = getCleanCategory(blog.category);
   const formattedHtml = formatContentToHtml(blog.description);
-  const blogTags = Array.isArray(blog.tags) ? blog.tags : [];
+  const blogTags = extractAllTags(blog);
 
   return (
     <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
       {/* Breadcrumb / Back Link */}
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <Link
           to="/"
           className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#f84560] hover:text-[#d62844] transition-colors"
@@ -162,13 +170,18 @@ export default function BlogDetails() {
         </Link>
       </div>
 
-      {/* Category & Meta */}
-      <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-gray-900 font-bold">{categoryText}</span>
-        <span>•</span>
-        <span>{dateText}</span>
-        <span>•</span>
-        <span>By Daily News Editorial</span>
+      {/* Category, Date & Header Share Button */}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+        <div className="text-[11px] font-bold tracking-[0.2em] text-gray-400 uppercase flex flex-wrap items-center gap-2">
+          <span className="text-gray-900 font-bold">{cleanCategory}</span>
+          <span>•</span>
+          <span>{dateText}</span>
+          <span>•</span>
+          <span>By Daily News Editorial</span>
+        </div>
+
+        {/* Compact Share Button at Top */}
+        <ShareButtons title={blog.title} variant="compact" />
       </div>
 
       {/* Red Accent Bar */}
@@ -197,9 +210,12 @@ export default function BlogDetails() {
         dangerouslySetInnerHTML={{ __html: formattedHtml }}
       />
 
-      {/* 4. VISIBLE FRONTEND: Tags (Only Title, Image, Description, and Tags are visible) */}
+      {/* 4. SOCIAL MEDIA SHARE BAR */}
+      <ShareButtons title={blog.title} variant="bar" />
+
+      {/* 5. VISIBLE FRONTEND: Tags (Only Title, Image, Description, and Tags are visible; SEO items hidden) */}
       {blogTags.length > 0 && (
-        <div className="mt-12 pt-8 border-t border-gray-200">
+        <div className="pt-6 border-t border-gray-200">
           <div className="text-[11px] font-bold tracking-[0.22em] uppercase text-gray-500 mb-3 flex items-center gap-1.5">
             <Tag className="w-3.5 h-3.5 text-[#f84560]" />
             <span>Tags & Topics</span>
@@ -218,9 +234,6 @@ export default function BlogDetails() {
           </div>
         </div>
       )}
-
-      {/* NOTE: SEO Title, Slug, and Meta Description are intentionally kept hidden
-          from this article body and only rendered in HTML <head> for search engines */}
     </article>
   );
 }

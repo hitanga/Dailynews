@@ -1,286 +1,498 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import appletConfig from "../../firebase-applet-config.json";
-import { getActiveFirebaseConfig } from "../firebase";
+import { Mail, Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, KeyRound } from "lucide-react";
 
 export default function Login() {
-  const [error, setError] = useState("");
-  const [unauthorizedDomain, setUnauthorizedDomain] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState("signin"); // "signin" | "signup" | "forgot"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
   const [loading, setLoading] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  // Custom Firebase configuration fields for Vercel deployment
-  const [customApiKey, setCustomApiKey] = useState("");
-  const [customAuthDomain, setCustomAuthDomain] = useState("");
-  const [customProjectId, setCustomProjectId] = useState("");
-  const [customAppId, setCustomAppId] = useState("");
-  const [configSuccess, setConfigSuccess] = useState(false);
-
-  const { loginWithGoogle, loginAsEditor, user } = useAuth();
+  const { loginWithEmail, signUpWithEmail, resetPassword, user, isAdmin, adminEmail } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const currentHostname = typeof window !== "undefined" ? window.location.hostname : "";
-  const activeConfig = getActiveFirebaseConfig();
-  const projectId = activeConfig.projectId || appletConfig.projectId || "axiomatic-constant-gmn89";
-  const firebaseSettingsUrl = `https://console.firebase.google.com/project/${projectId}/authentication/settings`;
+  const redirectPath = location.state?.from || "/dashboard";
 
-  // If user is already authenticated, redirect to dashboard
+  // Redirect if user is already authenticated
   useEffect(() => {
     if (user) {
-      navigate("/dashboard", { replace: true });
+      if (isAdmin) {
+        navigate(redirectPath, { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
     }
-  }, [user, navigate]);
+  }, [user, isAdmin, navigate, redirectPath]);
 
-  const copyHostname = () => {
-    navigator.clipboard.writeText(currentHostname);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+  const mapAuthError = (code, defaultMsg) => {
+    switch (code) {
+      case "auth/invalid-credential":
+      case "auth/wrong-password":
+      case "auth/user-not-found":
+        return "Invalid email address or password. Please verify and try again.";
+      case "auth/email-already-in-use":
+        return "An account with this email address already exists. Please switch to Sign In.";
+      case "auth/weak-password":
+        return "Password is too weak. Please use at least 6 characters.";
+      case "auth/invalid-email":
+        return "Please enter a valid email address.";
+      case "auth/too-many-requests":
+        return "Too many failed attempts. Please reset your password or try again in a few minutes.";
+      default:
+        return defaultMsg || "Authentication failed. Please try again.";
+    }
   };
 
-  const handleGoogleLogin = async (preferRedirect = false) => {
+  const handleSignIn = async (e) => {
+    e.preventDefault();
     setError("");
-    setUnauthorizedDomain(false);
+    setSuccessMessage("");
+
+    if (!email.trim() || !password) {
+      setError("Please fill in both email and password.");
+      return;
+    }
+
     setLoading(true);
-
     try {
-      await loginWithGoogle(preferRedirect);
-      navigate("/dashboard");
+      await loginWithEmail(email, password);
+      // Auth listener will handle redirection
     } catch (err) {
-      console.error("Google Auth error:", err);
-
-      if (err.code === "auth/unauthorized-domain") {
-        setUnauthorizedDomain(true);
-        setError("Domain Not Authorized: Firebase requires this domain to be added to Authorized Domains.");
-      } else if (err.code === "auth/popup-closed-by-user") {
-        setError("Sign-in window was closed before completing.");
-      } else if (err.code === "auth/popup-blocked") {
-        setError("Sign-in popup was blocked. Switching to redirect sign-in...");
-        try {
-          await loginWithGoogle(true);
-        } catch (redirectErr) {
-          setError("Please allow popups or redirect authentication for this domain.");
-        }
-      } else if (err.code === "auth/network-request-failed") {
-        setError("Network error. Please check your internet connection.");
-      } else {
-        setError(err.message || "Failed to sign in with Google. Please try again.");
-      }
+      console.error("Sign in error:", err);
+      setError(mapAuthError(err.code, err.message));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditorLogin = () => {
-    loginAsEditor();
-    navigate("/dashboard");
-  };
-
-  const handleSaveCustomFirebase = (e) => {
+  const handleSignUp = async (e) => {
     e.preventDefault();
-    if (!customApiKey.trim() || !customProjectId.trim()) {
-      setError("Please provide at least the API Key and Project ID.");
+    setError("");
+    setSuccessMessage("");
+
+    if (!email.trim() || !password) {
+      setError("Please fill in all required fields.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match. Please re-type your password.");
       return;
     }
 
-    const configToSave = {
-      apiKey: customApiKey.trim(),
-      authDomain: customAuthDomain.trim() || `${customProjectId.trim()}.firebaseapp.com`,
-      projectId: customProjectId.trim(),
-      storageBucket: `${customProjectId.trim()}.appspot.com`,
-      appId: customAppId.trim() || "",
-    };
-
+    setLoading(true);
     try {
-      localStorage.setItem("custom_firebase_config", JSON.stringify(configToSave));
-      setConfigSuccess(true);
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
+      await signUpWithEmail(email, password, displayName);
+      setSuccessMessage("Account created successfully!");
     } catch (err) {
-      console.error("Failed to save config:", err);
-      setError("Unable to save custom configuration.");
+      console.error("Sign up error:", err);
+      setError(mapAuthError(err.code, err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMessage("");
+
+    if (!email.trim()) {
+      setError("Please enter your email address to receive password reset instructions.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await resetPassword(email);
+      setSuccessMessage(`Password reset link sent to ${email.trim()}. Please check your inbox.`);
+    } catch (err) {
+      console.error("Reset error:", err);
+      setError(mapAuthError(err.code, err.message));
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] flex items-center justify-center px-4 py-16 bg-gray-50/50">
-      <div className="max-w-lg w-full bg-white border border-gray-200 rounded p-8 sm:p-10 shadow-lg text-center">
-        {/* Brand */}
-        <span className="font-heading font-black tracking-tight text-3xl sm:text-4xl text-gray-900 uppercase block mb-1">
-          DAILY NEWS
-        </span>
-        <span className="block text-[10px] font-semibold tracking-[0.22em] text-gray-500 uppercase mb-6">
-          MULTIPURPOSE MAGAZINE AND BLOG
-        </span>
+    <div className="min-h-[82vh] bg-gradient-to-b from-gray-50 via-white to-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full">
+        {/* Brand Header */}
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-block">
+            <span className="font-heading font-black tracking-tight text-3xl sm:text-4xl text-gray-900 uppercase">
+              DAILY NEWS
+            </span>
+          </Link>
+          <span className="block text-[9px] font-bold tracking-[0.24em] text-gray-400 uppercase mt-1">
+            EDITORIAL AUTHENTICATION
+          </span>
+          <p className="text-xs text-gray-500 mt-2">
+            {mode === "signin" && "Sign in with your email account"}
+            {mode === "signup" && "Create a new reader or editorial account"}
+            {mode === "forgot" && "Reset your account password"}
+          </p>
+        </div>
 
-        <h1 className="font-heading text-xl font-bold text-gray-900 mb-2">
-          Editorial Sign In
-        </h1>
-        <p className="text-xs text-gray-600 mb-8">
-          Sign in to manage articles, publish content, and edit stories.
-        </p>
+        {/* Card Box */}
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-xl shadow-gray-100/70 p-6 sm:p-8">
+          {/* Admin Notice */}
+          <div className="mb-6 bg-amber-50/70 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-[11px] uppercase tracking-wider text-amber-800">
+                Admin Notice
+              </p>
+              <p className="text-amber-700 text-[11px] mt-0.5 leading-relaxed">
+                Dashboard & Story Publishing access is restricted exclusively to{" "}
+                <strong className="font-mono text-gray-900 bg-amber-100 px-1 py-0.5 rounded">
+                  {adminEmail}
+                </strong>
+                .
+              </p>
+            </div>
+          </div>
 
-        {/* Detailed Unauthorized Domain Resolution Card */}
-        {unauthorizedDomain && (
-          <div className="mb-6 bg-amber-50 border border-amber-300 text-left p-4 rounded text-xs text-amber-900 space-y-3">
-            <h3 className="font-bold text-amber-950 flex items-center gap-1.5 text-sm">
-              <span>⚠️ Action Required: Domain Authorization on Vercel</span>
-            </h3>
-            
-            <p className="text-amber-900 leading-relaxed">
-              If you added <strong>{currentHostname}</strong> to Firebase Authorized Domains, this error occurs because:
-            </p>
-
-            <ul className="list-disc list-inside space-y-1.5 text-[11px] text-amber-950 font-medium">
-              <li>
-                <strong>1. Project ID Mismatch:</strong> Your Vercel build is currently pointing to project <code className="bg-amber-100 px-1 py-0.5 rounded text-amber-900 font-mono font-bold">{projectId}</code>. If you added the domain to a different Firebase project, click below to connect your own project!
-              </li>
-              <li>
-                <strong>2. Google OAuth CDN Propagation (5–10 min):</strong> If you just added the domain, Google servers take a few minutes to update globally.
-              </li>
-              <li>
-                <strong>3. Instant Workaround:</strong> Click <strong>"Continue as Editorial Staff"</strong> below to enter the dashboard immediately without any delay!
-              </li>
-            </ul>
-
-            <div className="pt-2 border-t border-amber-200 flex items-center justify-between gap-2">
-              <span className="font-mono text-[11px] text-gray-700 bg-white border border-amber-200 px-2 py-1 rounded select-all">
-                {currentHostname}
-              </span>
+          {/* Mode Switcher Tabs (Sign In vs Create Account) */}
+          {mode !== "forgot" && (
+            <div className="flex border-b border-gray-200 mb-6">
               <button
                 type="button"
-                onClick={copyHostname}
-                className="bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1 rounded text-xs transition-colors shrink-0 cursor-pointer"
+                onClick={() => {
+                  setMode("signin");
+                  setError("");
+                  setSuccessMessage("");
+                }}
+                className={`flex-1 pb-3 text-xs font-bold uppercase tracking-wider text-center transition-colors cursor-pointer ${
+                  mode === "signin"
+                    ? "border-b-2 border-[#f84560] text-[#f84560]"
+                    : "text-gray-400 hover:text-gray-700"
+                }`}
               >
-                {copied ? "Copied! ✓" : "Copy Domain"}
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("signup");
+                  setError("");
+                  setSuccessMessage("");
+                }}
+                className={`flex-1 pb-3 text-xs font-bold uppercase tracking-wider text-center transition-colors cursor-pointer ${
+                  mode === "signup"
+                    ? "border-b-2 border-[#f84560] text-[#f84560]"
+                    : "text-gray-400 hover:text-gray-700"
+                }`}
+              >
+                Create Account
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Generic Error Notice */}
-        {error && !unauthorizedDomain && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 text-xs px-4 py-3 rounded text-left">
-            {error}
-          </div>
-        )}
-
-        {/* Sign In Action Buttons */}
-        <div className="space-y-3">
-          {/* 1. Google OAuth Button */}
-          <button
-            type="button"
-            onClick={() => handleGoogleLogin(false)}
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-semibold text-xs py-3 px-4 rounded transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
-          >
-            {/* Google SVG Logo */}
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-              />
-            </svg>
-            <span>{loading ? "Signing In with Google..." : "Continue with Google"}</span>
-          </button>
-
-          {/* Divider */}
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
+          {/* Feedback Messages */}
+          {error && (
+            <div className="mb-5 bg-red-50 border border-red-200 text-red-700 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
+              <span className="font-bold shrink-0">✕</span>
+              <span>{error}</span>
             </div>
-            <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-wider text-gray-400">
-              <span className="bg-white px-2">OR</span>
+          )}
+
+          {successMessage && (
+            <div className="mb-5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3.5 py-2.5 rounded-lg flex items-start gap-2">
+              <span className="font-bold shrink-0">✓</span>
+              <span>{successMessage}</span>
             </div>
-          </div>
+          )}
 
-          {/* 2. Instant Editorial Staff Access Bypass */}
-          <button
-            type="button"
-            onClick={handleEditorLogin}
-            className="w-full bg-[#1e2024] hover:bg-[#2b2f35] text-white font-bold text-xs uppercase tracking-wider py-3 px-4 rounded transition-colors shadow-sm cursor-pointer"
-          >
-            Continue as Editorial Staff (Instant Access)
-          </button>
-        </div>
+          {/* 1. SIGN IN FORM */}
+          {mode === "signin" && (
+            <form onSubmit={handleSignIn} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. championhonehy@gmail.com"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                </div>
+              </div>
 
-        {/* Footer info note */}
-        <div className="mt-8 pt-4 border-t border-gray-100 flex flex-col gap-2">
-          <p className="text-[11px] text-gray-500 leading-relaxed">
-            Current Firebase Project: <span className="font-mono text-gray-700 font-semibold">{projectId}</span>
-          </p>
-          <button
-            type="button"
-            onClick={() => setShowConfigModal(!showConfigModal)}
-            className="text-[11px] text-[#f84560] hover:underline font-bold"
-          >
-            {showConfigModal ? "Hide Custom Project Setup" : "Using your own Firebase project? Click here"}
-          </button>
-        </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("forgot");
+                      setError("");
+                      setSuccessMessage("");
+                    }}
+                    className="text-[11px] font-semibold text-[#f84560] hover:underline cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
 
-        {/* Custom Project Config Form */}
-        {showConfigModal && (
-          <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded text-left text-xs">
-            <h4 className="font-bold text-gray-900 mb-2">Connect Your Firebase Project</h4>
-            <p className="text-gray-500 text-[11px] mb-3">
-              If you authorized <code>{currentHostname}</code> in your personal Firebase project, enter its details here:
-            </p>
-            <form onSubmit={handleSaveCustomFirebase} className="space-y-2">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 uppercase">Project ID</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. my-daily-news-app"
-                  value={customProjectId}
-                  onChange={(e) => setCustomProjectId(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded text-xs bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 uppercase">API Key</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="AIzaSy..."
-                  value={customApiKey}
-                  onChange={(e) => setCustomApiKey(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded text-xs bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-700 uppercase">Auth Domain (optional)</label>
-                <input
-                  type="text"
-                  placeholder="my-daily-news-app.firebaseapp.com"
-                  value={customAuthDomain}
-                  onChange={(e) => setCustomAuthDomain(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded text-xs bg-white"
-                />
-              </div>
               <button
                 type="submit"
-                className="w-full bg-[#f84560] text-white font-bold py-2 rounded text-xs uppercase tracking-wider mt-2 cursor-pointer"
+                disabled={loading}
+                className="w-full mt-2 bg-[#f84560] hover:bg-[#e0344f] text-white py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md flex items-center justify-center gap-2"
               >
-                {configSuccess ? "Connected! Reloading..." : "Connect Project"}
+                <span>{loading ? "Signing In..." : "Sign In with Email"}</span>
+                {!loading && <ArrowRight className="w-3.5 h-3.5" />}
               </button>
             </form>
+          )}
+
+          {/* 2. CREATE ACCOUNT / SIGN UP FORM */}
+          {mode === "signup" && (
+            <form onSubmit={handleSignUp} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Full Name (Optional)
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Your Name"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Email Address *
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. championhonehy@gmail.com"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Password * (Min 6 characters)
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Create a strong password"
+                    className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 cursor-pointer"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Confirm Password *
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    minLength={6}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter your password"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full mt-2 bg-[#f84560] hover:bg-[#e0344f] text-white py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md flex items-center justify-center gap-2"
+              >
+                <span>{loading ? "Creating Account..." : "Create Account"}</span>
+                {!loading && <ArrowRight className="w-3.5 h-3.5" />}
+              </button>
+            </form>
+          )}
+
+          {/* 3. FORGOT PASSWORD FORM */}
+          {mode === "forgot" && (
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div className="mb-2">
+                <span className="text-[10px] font-bold tracking-[0.2em] text-[#f84560] uppercase block mb-1">
+                  PASSWORD RECOVERY
+                </span>
+                <h3 className="font-heading font-bold text-lg text-gray-900">
+                  Reset Account Password
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter your email address and Firebase Authentication will send you a password reset link.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-700 mb-1.5">
+                  Account Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. championhonehy@gmail.com"
+                    className="w-full pl-10 pr-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:bg-white focus:border-[#f84560] transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-[#f84560] hover:bg-[#e0344f] text-white py-3 px-4 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{loading ? "Sending..." : "Send Reset Link"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setError("");
+                    setSuccessMessage("");
+                  }}
+                  className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 hover:text-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Bottom helper */}
+          <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+            {mode === "signin" && (
+              <p className="text-xs text-gray-500">
+                Don't have an account yet?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setError("");
+                    setSuccessMessage("");
+                  }}
+                  className="font-bold text-[#f84560] hover:underline cursor-pointer"
+                >
+                  Create one now
+                </button>
+              </p>
+            )}
+
+            {mode === "signup" && (
+              <p className="text-xs text-gray-500">
+                Already registered?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setError("");
+                    setSuccessMessage("");
+                  }}
+                  className="font-bold text-[#f84560] hover:underline cursor-pointer"
+                >
+                  Sign in here
+                </button>
+              </p>
+            )}
+
+            {mode === "forgot" && (
+              <p className="text-xs text-gray-500">
+                Remember your password?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setError("");
+                    setSuccessMessage("");
+                  }}
+                  className="font-bold text-[#f84560] hover:underline cursor-pointer"
+                >
+                  Back to Sign In
+                </button>
+              </p>
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Back to Magazine Link */}
+        <div className="mt-6 text-center">
+          <Link
+            to="/"
+            className="text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            ← Return to Magazine
+          </Link>
+        </div>
       </div>
     </div>
   );

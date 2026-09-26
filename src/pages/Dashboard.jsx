@@ -176,9 +176,15 @@ export default function Dashboard() {
                 className="w-5 h-5 rounded-full object-cover"
               />
             )}
-            <p className="text-xs text-gray-500">
-              Authenticated editor: <span className="font-medium text-gray-800">{user?.displayName || user?.email || "Editorial Staff"}</span>
-            </p>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200 uppercase tracking-wider">
+                <span>👑</span>
+                <span>Administrator</span>
+              </span>
+              <span className="text-xs text-gray-700 font-mono font-medium">
+                {user?.email}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -361,9 +367,9 @@ export default function Dashboard() {
                     >
                       {isFact ? "💡 FUN FACTS" : "📰 NEWS"}
                     </span>
-                    {blog.category && (
+                    {Array.isArray(blog.tags) && blog.tags.length > 0 && (
                       <span className="text-[10px] text-gray-400 font-semibold">
-                        {blog.category}
+                        • {blog.tags.length} {blog.tags.length === 1 ? "tag" : "tags"}
                       </span>
                     )}
                   </div>

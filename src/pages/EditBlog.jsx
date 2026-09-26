@@ -135,9 +135,11 @@ export default function EditBlog() {
     setSaving(true);
 
     try {
-      const finalCategory = subTag.trim()
-        ? `${categoryType}, ${subTag.trim()}`
-        : categoryType;
+      const finalCategory = categoryType;
+      const allTags = [...tags];
+      if (subTag.trim() && !allTags.includes(subTag.trim())) {
+        allTags.unshift(subTag.trim());
+      }
 
       const finalSlug = (slug.trim() || generateSlug(title)).trim();
 
@@ -146,7 +148,7 @@ export default function EditBlog() {
         imageUrl: imageUrl.trim(),
         category: finalCategory,
         description: description.trim(),
-        tags: tags,
+        tags: allTags,
         // SEO Fields
         seoTitle: (seoTitle.trim() || title.trim()),
         slug: finalSlug,

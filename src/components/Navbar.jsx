@@ -6,7 +6,7 @@ export default function Navbar({ onSearch }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -79,23 +79,23 @@ export default function Navbar({ onSearch }) {
             </span>
           </div>
 
-          {/* Right Side: Editorial / User Login / Dashboard (No social icons) */}
+          {/* Right Side: Editorial / User Login / Dashboard */}
           <div className="flex items-center gap-3 sm:gap-4">
             {user ? (
               <div className="flex items-center gap-2">
-                <Link
-                  to="/dashboard"
-                  className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-800 hover:text-[#f84560] bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded transition-colors"
-                >
-                  {user.photoURL && (
-                    <img
-                      src={user.photoURL}
-                      alt="Avatar"
-                      className="w-4 h-4 rounded-full object-cover"
-                    />
-                  )}
-                  <span>Dashboard</span>
-                </Link>
+                {isAdmin ? (
+                  <Link
+                    to="/dashboard"
+                    className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-800 hover:text-[#f84560] bg-red-50/60 border border-red-200/60 hover:bg-red-50 px-3 py-1.5 rounded transition-colors"
+                  >
+                    <span>👑</span>
+                    <span>Dashboard</span>
+                  </Link>
+                ) : (
+                  <span className="text-[11px] font-semibold text-gray-500 bg-gray-50 px-2.5 py-1 rounded max-w-[130px] truncate" title={user.email}>
+                    {user.displayName || user.email}
+                  </span>
+                )}
                 <button
                   onClick={handleLogout}
                   className="text-xs text-red-500 hover:text-red-700 font-bold uppercase tracking-wider px-2 py-1 cursor-pointer"

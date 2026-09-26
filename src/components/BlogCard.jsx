@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { Camera } from "lucide-react";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
-import { stripHtml } from "../utils/contentFormatter";
+import { stripHtml, getCleanCategory } from "../utils/contentFormatter";
 
 export const formatDate = (timestamp, fallbackDate) => {
   if (fallbackDate) return fallbackDate;
@@ -25,7 +25,7 @@ export default function BlogCard({ blog }) {
   const [imgSrc, setImgSrc] = useState(isBadUrl ? heroCityStreetImg : blog.imageUrl);
 
   const dateText = formatDate(blog.createdAt, blog.dateString);
-  const categoryText = blog.category || "Featured, Trending";
+  const cleanCategory = getCleanCategory(blog.category);
 
   return (
     <article className="flex flex-col group">
@@ -45,7 +45,7 @@ export default function BlogCard({ blog }) {
         </Link>
 
         {/* Fun Fact Badge (top left) */}
-        {categoryText.toLowerCase().includes("fun fact") && (
+        {cleanCategory === "Fun Facts" && (
           <div className="absolute top-2.5 left-2.5 bg-amber-500 text-white font-extrabold text-[9px] tracking-wider uppercase px-2 py-0.5 rounded shadow-xs">
             💡 Fun Fact
           </div>
@@ -75,7 +75,7 @@ export default function BlogCard({ blog }) {
         <div className="text-[10px] font-bold tracking-[0.16em] text-gray-400 uppercase flex items-center gap-1.5 flex-wrap">
           <span>{dateText}</span>
           <span>•</span>
-          <span className="text-gray-600">{categoryText}</span>
+          <span className="text-gray-700 font-bold">{cleanCategory}</span>
         </div>
 
         {/* Red / Coral Accent Line */}

@@ -66,9 +66,14 @@ export default function CreateBlog() {
         year: "numeric",
       });
 
-      const finalCategory = subTag.trim()
-        ? `${categoryType}, ${subTag.trim()}`
-        : categoryType;
+      // Category is strictly "News" or "Fun Facts"
+      const finalCategory = categoryType;
+      
+      // If user typed a topic or sub-tag, merge it into the tags array
+      const allTags = [...tags];
+      if (subTag.trim() && !allTags.includes(subTag.trim())) {
+        allTags.unshift(subTag.trim());
+      }
 
       const finalSlug = (slug.trim() || generateSlug(title)).trim();
 
@@ -77,7 +82,7 @@ export default function CreateBlog() {
         imageUrl: imageUrl.trim(),
         category: finalCategory,
         description: description.trim(),
-        tags: tags,
+        tags: allTags,
         // SEO Fields (stored in database and meta tags, hidden on article body)
         seoTitle: (seoTitle.trim() || title.trim()),
         slug: finalSlug,

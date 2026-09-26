@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import heroFallbackImg from "../assets/images/hero_city_street_1790345223275.jpg";
-import { stripHtml } from "../utils/contentFormatter";
+import { stripHtml, getCleanCategory } from "../utils/contentFormatter";
 
 export default function HeroSection({ blog }) {
   if (!blog) return null;
@@ -23,7 +23,7 @@ export default function HeroSection({ blog }) {
       : "FEBRUARY 1, 2019")
   ).toUpperCase();
 
-  const category = (blog.category || "FEATURED").toUpperCase();
+  const category = getCleanCategory(blog.category).toUpperCase();
   const comments = blog.commentsCount ?? 0;
 
   return (

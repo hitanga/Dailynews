@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { formatDate } from "./BlogCard";
 import heroCityStreetImg from "../assets/images/hero_city_street_1790345223275.jpg";
-import { stripHtml } from "../utils/contentFormatter";
+import { stripHtml, getCleanCategory } from "../utils/contentFormatter";
 
 export default function FunFactsSection({ blogs }) {
   if (!blogs || blogs.length === 0) return null;
@@ -55,7 +55,7 @@ export default function FunFactsSection({ blogs }) {
             <div className="text-[10px] font-bold tracking-[0.16em] text-gray-400 uppercase flex items-center gap-1.5 mb-1.5">
               <span>{formatDate(mainPick.createdAt, mainPick.dateString)}</span>
               <span>•</span>
-              <span className="text-amber-700 font-bold">{mainPick.category || "Fun Facts"}</span>
+              <span className="text-amber-700 font-bold">{getCleanCategory(mainPick.category)}</span>
             </div>
 
             <h3 className="font-heading text-xl sm:text-2xl font-bold text-gray-900 group-hover:text-[#f84560] transition-colors leading-snug mb-2">

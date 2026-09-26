@@ -1,13 +1,24 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
 import { auth } from "../firebase";
+
+// Designated Admin Email
+export const ADMIN_EMAIL = "championhonehy@gmail.com";
+
+// Helper to verify if user has admin privileges
+export const checkIsAdmin = (user) => {
+  if (!user || !user.email) return false;
+  const email = user.email.toLowerCase().trim();
+  // Grant admin access to championhonehy@gmail.com (and championhoney@gmail.com if typo)
+  return email === "championhonehy@gmail.com" || email === "championhoney@gmail.com";
+};
 
 // Create the Authentication Context
 const AuthContext = createContext();
@@ -26,39 +37,41 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Sign in using Google Authentication (Popup with Redirect fallback)
-  const loginWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    try {
-      return await signInWithPopup(auth, provider);
-    } catch (err) {
-      if (err.code === "auth/popup-blocked") {
-        return await signInWithRedirect(auth, provider);
+  // Sign in with Email and Password
+  const loginWithEmail = async (email, password) => {
+    const trimmedEmail = email.trim();
+    return await signInWithEmailAndPassword(auth, trimmedEmail, password);
+  };
+
+  // Register / Sign up with Email and Password
+  const signUpWithEmail = async (email, password, displayName = "") => {
+    const trimmedEmail = email.trim();
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      trimmedEmail,
+      password
+    );
+
+    if (displayName && userCredential.user) {
+      try {
+        await updateProfile(userCredential.user, {
+          displayName: displayName.trim(),
+        });
+      } catch (err) {
+        console.warn("Could not update user display name:", err);
       }
-      throw err;
     }
+
+    return userCredential;
   };
 
-  // Sign in as Editorial Staff (Instant Access bypass for domain propagation / editor access)
-  const loginAsEditor = (customEmail = "editor@dailynews.com", name = "Daily News Editorial") => {
-    const editorUser = {
-      uid: "editor-" + Date.now(),
-      email: customEmail,
-      displayName: name,
-      photoURL: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-      isEditor: true,
-    };
-    try {
-      localStorage.setItem("daily_news_auth_user", JSON.stringify(editorUser));
-    } catch (e) {
-      console.warn("Could not save to localStorage:", e);
-    }
-    setUser(editorUser);
-    return editorUser;
+  // Send Password Reset Email
+  const resetPassword = async (email) => {
+    const trimmedEmail = email.trim();
+    return await sendPasswordResetEmail(auth, trimmedEmail);
   };
 
-  // Log out current user
+  // Sign out current user
   const logout = async () => {
     try {
       localStorage.removeItem("daily_news_auth_user");
@@ -69,52 +82,32 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Listen to Firebase auth state changes and redirect result
+  // Check if current authenticated user is the designated administrator
+  const isAdmin = checkIsAdmin(user);
+
+  // Listen to Firebase auth state changes
   useEffect(() => {
-    // Check if there was an in-flight redirect login
-    getRedirectResult(auth)
-      .then((res) => {
-        if (res?.user) {
-          setUser(res.user);
-        }
-      })
-      .catch((err) => {
-        console.warn("Redirect result error:", err);
-      });
-
-    // Check cached local editor session
-    let localUser = null;
-    try {
-      const stored = localStorage.getItem("daily_news_auth_user");
-      if (stored) {
-        localUser = JSON.parse(stored);
-      }
-    } catch (e) {}
-
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else if (localUser) {
-        setUser(localUser);
-      } else {
-        setUser(null);
-      }
+      setUser(currentUser);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const value = {
-    user,
-    loading,
-    loginWithGoogle,
-    loginAsEditor,
-    logout,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAdmin,
+        loading,
+        loginWithEmail,
+        signUpWithEmail,
+        resetPassword,
+        logout,
+        adminEmail: ADMIN_EMAIL,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
