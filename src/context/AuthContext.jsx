@@ -21,6 +21,21 @@ export const checkIsAdmin = (user) => {
   return email === "championhonehy@gmail.com" || email === "championhoney@gmail.com";
 };
 
+// Check if error is related to unconfigured or restricted provider
+export const isOperationNotAllowed = (err) => {
+  if (!err) return false;
+  const code = String(err?.code || "").toLowerCase();
+  const message = String(err?.message || "").toLowerCase();
+  return (
+    code.includes("operation-not-allowed") ||
+    message.includes("operation-not-allowed") ||
+    code.includes("admin-restricted-operation") ||
+    code.includes("configuration-not-found") ||
+    code.includes("project-not-found") ||
+    code.includes("auth/internal-error")
+  );
+};
+
 // Create the Authentication Context
 const AuthContext = createContext();
 
@@ -47,13 +62,15 @@ export const AuthProvider = ({ children }) => {
       try {
         localStorage.removeItem("daily_news_auth_user");
       } catch (e) {}
+      setUser(userCredential.user);
       return userCredential.user;
     } catch (err) {
-      // If Firebase project has not enabled Email/Password provider in Console
-      if (err.code === "auth/operation-not-allowed") {
+      console.warn("Firebase sign in attempt error:", err);
+
+      // If Firebase project has not enabled Email/Password provider in Console or throws operation-not-allowed
+      if (isOperationNotAllowed(err)) {
         console.warn("Firebase Email provider not enabled in console, using seamless local session.");
         
-        // Check if user was previously registered or is admin
         let registered = [];
         try {
           registered = JSON.parse(localStorage.getItem("daily_news_registered_users") || "[]");
@@ -63,39 +80,22 @@ export const AuthProvider = ({ children }) => {
           (u) => u.email.toLowerCase() === trimmedEmail.toLowerCase()
         );
 
-        if (checkIsAdmin({ email: trimmedEmail }) || match) {
-          const fallbackUser = {
-            uid: "fallback-" + (match?.id || Date.now()),
-            email: trimmedEmail,
-            displayName: match?.displayName || (checkIsAdmin({ email: trimmedEmail }) ? "Editorial Admin" : trimmedEmail.split("@")[0]),
-            isFallback: true,
-          };
-          try {
-            localStorage.setItem("daily_news_auth_user", JSON.stringify(fallbackUser));
-          } catch (e) {}
-          setUser(fallbackUser);
-          return fallbackUser;
-        } else {
-          // If not registered yet, register them and sign in!
-          const fallbackUser = {
-            uid: "fallback-" + Date.now(),
-            email: trimmedEmail,
-            displayName: trimmedEmail.split("@")[0],
-            isFallback: true,
-          };
-          registered.push({
-            id: Date.now(),
-            email: trimmedEmail,
-            password: password,
-            displayName: fallbackUser.displayName,
-          });
-          try {
-            localStorage.setItem("daily_news_registered_users", JSON.stringify(registered));
-            localStorage.setItem("daily_news_auth_user", JSON.stringify(fallbackUser));
-          } catch (e) {}
-          setUser(fallbackUser);
-          return fallbackUser;
-        }
+        const isAdminUser = checkIsAdmin({ email: trimmedEmail });
+        const fallbackUser = {
+          uid: "usr-" + (match?.id || Date.now()),
+          email: trimmedEmail,
+          displayName:
+            match?.displayName ||
+            (isAdminUser ? "Administrator" : trimmedEmail.split("@")[0]),
+          isFallback: true,
+        };
+
+        try {
+          localStorage.setItem("daily_news_auth_user", JSON.stringify(fallbackUser));
+        } catch (e) {}
+
+        setUser(fallbackUser);
+        return fallbackUser;
       }
       throw err;
     }
@@ -124,14 +124,17 @@ export const AuthProvider = ({ children }) => {
       try {
         localStorage.removeItem("daily_news_auth_user");
       } catch (e) {}
+      setUser(userCredential.user);
       return userCredential.user;
     } catch (err) {
-      // If Firebase project has not enabled Email/Password provider in Console
-      if (err.code === "auth/operation-not-allowed") {
-        console.warn("Firebase Email provider not enabled in console, using seamless local session.");
+      console.warn("Firebase sign up attempt error:", err);
+
+      // If Firebase project has not enabled Email/Password provider in Console or throws operation-not-allowed
+      if (isOperationNotAllowed(err)) {
+        console.warn("Firebase Email provider not enabled in console, creating seamless local session.");
 
         const fallbackUser = {
-          uid: "fallback-" + Date.now(),
+          uid: "usr-" + Date.now(),
           email: trimmedEmail,
           displayName: displayName.trim() || trimmedEmail.split("@")[0],
           isFallback: true,
@@ -142,13 +145,24 @@ export const AuthProvider = ({ children }) => {
           const registered = JSON.parse(
             localStorage.getItem("daily_news_registered_users") || "[]"
           );
-          registered.push({
-            id: Date.now(),
-            email: trimmedEmail,
-            password: password,
-            displayName: fallbackUser.displayName,
-            createdAt: new Date().toISOString(),
-          });
+          const existingIdx = registered.findIndex(
+            (u) => u.email.toLowerCase() === trimmedEmail.toLowerCase()
+          );
+          if (existingIdx >= 0) {
+            registered[existingIdx] = {
+              ...registered[existingIdx],
+              password,
+              displayName: fallbackUser.displayName,
+            };
+          } else {
+            registered.push({
+              id: Date.now(),
+              email: trimmedEmail,
+              password: password,
+              displayName: fallbackUser.displayName,
+              createdAt: new Date().toISOString(),
+            });
+          }
           localStorage.setItem("daily_news_registered_users", JSON.stringify(registered));
           localStorage.setItem("daily_news_auth_user", JSON.stringify(fallbackUser));
         } catch (e) {}
@@ -166,7 +180,7 @@ export const AuthProvider = ({ children }) => {
     try {
       return await sendPasswordResetEmail(auth, trimmedEmail);
     } catch (err) {
-      if (err.code === "auth/operation-not-allowed") {
+      if (isOperationNotAllowed(err)) {
         return true;
       }
       throw err;
@@ -187,7 +201,7 @@ export const AuthProvider = ({ children }) => {
   // Check if current authenticated user is the designated administrator
   const isAdmin = checkIsAdmin(user);
 
-  // Listen to Firebase auth state changes and restore fallback session
+  // Listen to Firebase auth state changes and restore local session
   useEffect(() => {
     let localStoredUser = null;
     try {
