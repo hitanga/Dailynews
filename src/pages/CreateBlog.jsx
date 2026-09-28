@@ -77,6 +77,7 @@ export default function CreateBlog() {
 
       const finalSlug = (slug.trim() || generateSlug(title)).trim();
 
+      const nowIso = new Date().toISOString();
       const newPostData = {
         title: title.trim(),
         imageUrl: imageUrl.trim(),
@@ -94,11 +95,17 @@ export default function CreateBlog() {
         updatedAt: serverTimestamp(),
       };
 
-      // 1. Save to Firestore
+      // 1. Save to Firestore with a fast 3-second timeout so the UI never hangs if the database is pending creation
       let createdDocId = "custom-" + Date.now();
       try {
-        const docRef = await addDoc(collection(db, "blogs"), newPostData);
-        createdDocId = docRef.id;
+        const firestoreWrite = addDoc(collection(db, "blogs"), newPostData);
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Firestore connection timed out")), 3000)
+        );
+        const docRef = await Promise.race([firestoreWrite, timeout]);
+        if (docRef && docRef.id) {
+          createdDocId = docRef.id;
+        }
       } catch (firestoreErr) {
         console.warn("Firestore write fallback to local storage:", firestoreErr);
       }
@@ -110,8 +117,19 @@ export default function CreateBlog() {
         );
         localList.unshift({
           id: createdDocId,
-          ...newPostData,
-          createdAt: new Date().toISOString(),
+          title: title.trim(),
+          imageUrl: imageUrl.trim(),
+          category: finalCategory,
+          description: description.trim(),
+          tags: allTags,
+          seoTitle: (seoTitle.trim() || title.trim()),
+          slug: finalSlug,
+          metaDescription: metaDescription.trim(),
+          dateString: dateString,
+          commentsCount: 0,
+          isHero: categoryType === "News",
+          createdAt: nowIso,
+          updatedAt: nowIso,
         });
         localStorage.setItem(
           "daily_news_custom_blogs",

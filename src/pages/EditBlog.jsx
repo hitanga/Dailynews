@@ -156,10 +156,14 @@ export default function EditBlog() {
         updatedAt: serverTimestamp(),
       };
 
-      // 1. Update in Firestore
+      // 1. Update in Firestore with a fast 3-second timeout
       try {
         const blogRef = doc(db, "blogs", id);
-        await setDoc(blogRef, updatedFields, { merge: true });
+        const updatePromise = setDoc(blogRef, updatedFields, { merge: true });
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Firestore write timed out")), 3000)
+        );
+        await Promise.race([updatePromise, timeout]);
       } catch (firestoreErr) {
         console.warn("Firestore write skipped, updating locally:", firestoreErr);
       }
