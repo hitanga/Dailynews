@@ -41,10 +41,13 @@ export default function Home() {
     location.pathname === "/fun-facts" ||
     (categoryFilter && categoryFilter.toLowerCase().includes("fun"));
 
-  // Check if viewing the dedicated News page
+  // Check if viewing the dedicated News / Horror Stories page
   const isNewsPage =
     location.pathname === "/news" ||
-    (categoryFilter && categoryFilter.toLowerCase().includes("news"));
+    location.pathname === "/horror-stories" ||
+    (categoryFilter &&
+      (categoryFilter.toLowerCase().includes("news") ||
+        categoryFilter.toLowerCase().includes("horror")));
 
   useEffect(() => {
     const blogsRef = collection(db, "blogs");
@@ -254,27 +257,27 @@ export default function Home() {
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
               <span className="text-[11px] font-bold tracking-[0.24em] text-[#f84560] uppercase mb-2 flex items-center gap-1.5">
-                <span>📰</span>
-                <span>DAILY NEWS REPORTING • GLOBAL & LOCAL</span>
+                <span>👻</span>
+                <span>CHILLING TALES & MYSTERIES • READ IF YOU DARE</span>
               </span>
               <h1 className="font-heading text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight">
-                Latest News
+                Latest Horror Stories
               </h1>
               <p className="text-gray-500 text-sm mt-2 max-w-2xl">
-                Stay informed with breaking headlines, comprehensive market updates, and editorial reports.
+                Immerse yourself in terrifying encounters, creepy folklore, true horror reports, and spine-chilling mysteries.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-gray-500 bg-red-50 border border-red-200 px-3 py-1.5 rounded-full">
-                {displayedNews.length} {displayedNews.length === 1 ? "News Story" : "News Stories"} Published
+                {displayedNews.length} {displayedNews.length === 1 ? "Horror Story" : "Horror Stories"} Published
               </span>
               {isAdmin && (
                 <Link
                   to="/dashboard/create"
                   className="bg-[#f84560] hover:bg-[#e0344f] text-white font-bold text-xs uppercase tracking-wider px-4 py-1.5 rounded-full transition-colors shadow-xs"
                 >
-                  + Write News
+                  + Write Horror Story
                 </Link>
               )}
             </div>
@@ -401,24 +404,24 @@ export default function Home() {
       {/* 1. Hero Feature Section (Displays newest/featured news blog) */}
       {heroPost && <HeroSection blog={heroPost} />}
 
-      {/* 2. Latest News Section */}
+      {/* 2. Latest Horror Stories Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <div className="mb-10 text-left flex items-end justify-between">
           <div>
             <span className="block text-[11px] font-bold tracking-[0.22em] text-[#f84560] uppercase mb-1.5 flex items-center gap-1.5">
-              <span>📰</span>
-              <span>BROWSE AND READ THE LATEST STUFF</span>
+              <span>👻</span>
+              <span>BROWSE AND READ THE CHILLING TALES</span>
             </span>
             <h2 className="font-heading text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
-              Latest News
+              Latest Horror Stories
             </h2>
           </div>
 
           <Link
-            to="/news"
+            to="/horror-stories"
             className="text-xs font-bold uppercase tracking-wider text-[#f84560] hover:text-[#d62844] hidden sm:flex items-center gap-1"
           >
-            <span>View All News</span>
+            <span>View All Horror Stories</span>
             <span>→</span>
           </Link>
         </div>

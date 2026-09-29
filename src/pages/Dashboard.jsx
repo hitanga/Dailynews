@@ -340,7 +340,7 @@ export default function Dashboard() {
               : "bg-red-50 text-red-700 hover:bg-red-100"
           }`}
         >
-          <span>📰 Latest News</span>
+          <span>👻 Latest Horror Stories</span>
           <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${selectedCategoryTab === "news" ? "bg-red-800 text-white" : "bg-red-100 text-red-800"}`}>
             {newsCount}
           </span>
@@ -407,7 +407,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
             <span>
               {selectedCategoryTab === "news"
-                ? "Latest News Stories"
+                ? "Latest Horror Stories"
                 : selectedCategoryTab === "fun-facts"
                 ? "Fun Facts Stories"
                 : "All Stories"}{" "}

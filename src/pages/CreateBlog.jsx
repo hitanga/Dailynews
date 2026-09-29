@@ -185,7 +185,7 @@ export default function CreateBlog() {
             Select Story Category *
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
-            {/* 1. News Card */}
+            {/* 1. Horror Stories Card */}
             <div
               onClick={() => setCategoryType("News")}
               className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
@@ -196,8 +196,8 @@ export default function CreateBlog() {
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-heading font-extrabold text-sm text-gray-900 flex items-center gap-2">
-                  <span>📰</span>
-                  <span>News Story</span>
+                  <span>👻</span>
+                  <span>Horror Story</span>
                 </span>
                 <span
                   className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
@@ -212,7 +212,7 @@ export default function CreateBlog() {
                 </span>
               </div>
               <p className="text-xs text-gray-500">
-                Displays in the <strong>Latest News</strong> section and Hero headline on the homepage.
+                Displays in the <strong>Latest Horror Stories</strong> section and Hero headline on the homepage.
               </p>
             </div>
 

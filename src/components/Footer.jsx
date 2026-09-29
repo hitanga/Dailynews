@@ -62,8 +62,8 @@ export default function Footer() {
           <Link to="/" className="hover:text-[#f84560] transition-colors">
             Home
           </Link>
-          <Link to="/?category=news" className="hover:text-[#f84560] transition-colors">
-            News
+          <Link to="/horror-stories" className="hover:text-[#f84560] transition-colors">
+            Horror Stories
           </Link>
           <Link to="/contact" className="hover:text-[#f84560] transition-colors">
             Contact

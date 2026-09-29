@@ -133,17 +133,20 @@ export default function Navbar({ onSearch }) {
               </Link>
             </li>
 
-            {/* 2. NEWS */}
+            {/* 2. HORROR STORIES */}
             <li>
               <Link
-                to="/news"
+                to="/horror-stories"
                 className={`transition-colors ${
-                  location.pathname === "/news" || location.search.includes("category=news")
+                  location.pathname === "/horror-stories" ||
+                  location.pathname === "/news" ||
+                  location.search.includes("category=horror") ||
+                  location.search.includes("category=news")
                     ? "text-[#f84560]"
                     : "hover:text-[#f84560]"
                 }`}
               >
-                NEWS
+                HORROR STORIES
               </Link>
             </li>
 
