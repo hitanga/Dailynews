@@ -115,6 +115,25 @@ export const DEFAULT_POSTS = [
   }
 ];
 
+export const DEFAULT_SAMPLE_TITLES = [
+  "at daybreak of the fifteenth day of my search",
+  "the sunset faded to twilight",
+  "did you know? coffee beans are actually fruit seeds",
+  "two long weeks i wandered along the highway",
+  "honey never spoils: 3,000-year-old edible honey in egyptian tombs",
+  "global financial markets shift as central banks signal rate pauses",
+  "why flamingos are born grey and turn pink from their diet",
+  "the great wall of china is held together by sticky rice mortar",
+  "renewable energy capacity surpasses forecasts across major metros",
+];
+
+export function isSampleDefaultBlog(blog) {
+  if (!blog) return false;
+  if (typeof blog.id === "string" && blog.id.startsWith("post-")) return true;
+  const title = (blog.title || "").toLowerCase().trim();
+  return DEFAULT_SAMPLE_TITLES.includes(title);
+}
+
 export function getBlogTime(doc) {
   if (!doc) return 0;
   if (doc.createdAt?.toDate) return doc.createdAt.toDate().getTime();
@@ -129,19 +148,24 @@ export function getBlogTime(doc) {
 
 export function combineBlogsConsistently(firestoreDocs = [], localCustom = []) {
   let deletedIds = new Set();
+  let deletedTitles = new Set();
   try {
     const del = JSON.parse(localStorage.getItem("daily_news_deleted_ids") || "[]");
     deletedIds = new Set(del);
+    const delTitles = JSON.parse(
+      localStorage.getItem("daily_news_deleted_titles") || "[]"
+    );
+    deletedTitles = new Set(delTitles.map((t) => (t || "").toLowerCase().trim()));
   } catch (e) {}
 
-  const defaultWithIds = DEFAULT_POSTS.map((p, idx) => ({
-    id: `post-${idx}`,
-    ...p,
-  }));
-
-  // Clean firestore documents of any broken URLs and filter deleted
+  // Clean firestore documents of any broken URLs, filter deleted, and filter default sample posts
   const cleanFirestore = firestoreDocs
-    .filter((doc) => !deletedIds.has(doc.id))
+    .filter(
+      (doc) =>
+        !deletedIds.has(doc.id) &&
+        !deletedTitles.has((doc.title || "").toLowerCase().trim()) &&
+        !isSampleDefaultBlog(doc)
+    )
     .map((doc) => {
       let cleanImg = doc.imageUrl;
       if (!cleanImg || cleanImg.includes("photo-1477959858617-67f30bc75b82")) {
@@ -154,29 +178,23 @@ export function combineBlogsConsistently(firestoreDocs = [], localCustom = []) {
     });
 
   const existingIds = new Set(cleanFirestore.map((d) => d.id));
-  const uniqueLocal = localCustom
-    .filter((c) => !existingIds.has(c.id) && !deletedIds.has(c.id));
+  const uniqueLocal = localCustom.filter(
+    (c) =>
+      !existingIds.has(c.id) &&
+      !deletedIds.has(c.id) &&
+      !deletedTitles.has((c.title || "").toLowerCase().trim()) &&
+      !isSampleDefaultBlog(c)
+  );
 
-  // Merge live user posts
+  // Merge ONLY live user posts (never inject DEFAULT_POSTS into the user feed)
   const liveList = [...uniqueLocal, ...cleanFirestore];
   liveList.sort((a, b) => getBlogTime(b) - getBlogTime(a));
 
-  // Merge with default editorial stories
   const titlesSeen = new Set();
   const finalMerged = [];
 
-  // Add live user and firestore docs first (newest at the top)
+  // Add live user and firestore docs (newest at the top)
   for (const item of liveList) {
-    const key = (item.title || "").toLowerCase().trim();
-    if (key && !titlesSeen.has(key)) {
-      titlesSeen.add(key);
-      finalMerged.push(item);
-    }
-  }
-
-  // Then add remaining default editorial stories that were not deleted
-  for (const item of defaultWithIds) {
-    if (deletedIds.has(item.id)) continue;
     const key = (item.title || "").toLowerCase().trim();
     if (key && !titlesSeen.has(key)) {
       titlesSeen.add(key);
@@ -188,34 +206,9 @@ export function combineBlogsConsistently(firestoreDocs = [], localCustom = []) {
 }
 
 /**
- * Seeds Firestore with default sample blog posts if collection is empty
+ * Disabled: auto-seeding is permanently disabled so default sample posts
+ * will never automatically re-insert themselves into the user's database.
  */
 export async function seedInitialBlogsIfEmpty() {
-  try {
-    const blogsRef = collection(db, "blogs");
-    const snapshot = await getDocs(blogsRef);
-    if (snapshot.empty) {
-      console.log("Seeding initial blogs from Gutenverse theme with tags and SEO...");
-      for (const post of DEFAULT_POSTS) {
-        await addDoc(blogsRef, {
-          title: post.title,
-          imageUrl: post.imageUrl,
-          description: post.description,
-          category: post.category || "News",
-          tags: post.tags || [],
-          slug: post.slug || "",
-          seoTitle: post.seoTitle || post.title,
-          metaDescription: post.metaDescription || "",
-          dateString: post.dateString || "February 1, 2019",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.warn("Auto-seed skipped or permission pending:", err);
-    return false;
-  }
+  return false;
 }

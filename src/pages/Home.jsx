@@ -74,7 +74,6 @@ export default function Home() {
           setBlogs(merged);
         } else {
           setBlogs(combineBlogsConsistently([], localCustom));
-          seedInitialBlogsIfEmpty().catch(() => {});
         }
       },
       (error) => {
@@ -295,24 +294,25 @@ export default function Home() {
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="mb-8">
             <h2 className="font-heading text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
-              All News Stories
+              All Horror Stories
             </h2>
           </div>
 
           {displayedNews.length === 0 ? (
-            <div className="py-16 text-center bg-gray-50 border border-gray-100 p-8 rounded">
+            <div className="py-16 text-center bg-gray-50 border border-gray-100 p-8 rounded-lg max-w-xl mx-auto">
+              <span className="text-4xl mb-3 block">🕯️</span>
               <h3 className="font-heading text-lg font-bold text-gray-800 mb-2">
-                No News Stories Found
+                No Horror Stories Published Yet
               </h3>
-              <p className="text-xs text-gray-500 mb-4">
-                Check back shortly for latest breaking news and editorial reports.
+              <p className="text-xs text-gray-500 mb-5">
+                Check back shortly for new chilling tales, supernatural encounters, and horror narratives.
               </p>
               {isAdmin && (
                 <Link
                   to="/dashboard/create"
-                  className="inline-block bg-[#f84560] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-full"
+                  className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-full transition-colors shadow-xs"
                 >
-                  Create News Story
+                  + Write Horror Story
                 </Link>
               )}
             </div>
@@ -426,12 +426,32 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* 3-Column Latest News Stories Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
-          {latestNewsList.slice(0, visibleCount).map((blog) => (
-            <BlogCard key={blog.id} blog={blog} />
-          ))}
-        </div>
+        {/* 3-Column Latest Horror Stories Grid or Empty State */}
+        {latestNewsList.length === 0 && !heroPost ? (
+          <div className="text-center py-20 bg-gray-50 border border-gray-100 rounded-lg px-4 max-w-xl mx-auto">
+            <span className="text-4xl mb-3 block">🕯️</span>
+            <h3 className="font-heading font-extrabold text-lg text-gray-900 mb-2">
+              No Horror Stories Published Yet
+            </h3>
+            <p className="text-gray-500 text-xs sm:text-sm max-w-md mx-auto mb-6">
+              New chilling tales and eerie narratives will appear here once published.
+            </p>
+            {isAdmin && (
+              <Link
+                to="/dashboard/create"
+                className="inline-block bg-[#f84560] hover:bg-[#e0344f] text-white font-bold text-xs uppercase tracking-wider px-6 py-2.5 rounded-full transition-colors shadow-xs"
+              >
+                + Write First Horror Story
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
+            {latestNewsList.slice(0, visibleCount).map((blog) => (
+              <BlogCard key={blog.id} blog={blog} />
+            ))}
+          </div>
+        )}
 
         {/* "MORE POSTS" Button for Latest News */}
         {latestNewsList.length > visibleCount && (

@@ -4,7 +4,12 @@ import { collection, getDocs, doc, deleteDoc, query, orderBy } from "firebase/fi
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { formatDate } from "../components/BlogCard";
-import { seedInitialBlogsIfEmpty, combineBlogsConsistently } from "../utils/seedData";
+import {
+  seedInitialBlogsIfEmpty,
+  combineBlogsConsistently,
+  isSampleDefaultBlog,
+  DEFAULT_SAMPLE_TITLES,
+} from "../utils/seedData";
 import { stripHtml } from "../utils/contentFormatter";
 import { Mail, Reply, Trash2, Clock, User, AlertCircle, RefreshCw } from "lucide-react";
 
@@ -15,7 +20,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [isSeeding, setIsSeeding] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
   // Delete confirmation modal state
   const [blogToDelete, setBlogToDelete] = useState(null);
@@ -126,20 +131,62 @@ export default function Dashboard() {
     }
   };
 
-  const handleSeedDefaults = async () => {
-    setIsSeeding(true);
+  const handlePurgeSampleDefaults = async () => {
+    setIsPurging(true);
     setError("");
     setSuccessMessage("");
 
     try {
-      await seedInitialBlogsIfEmpty(true);
-      setSuccessMessage("Sample editorial stories populated successfully.");
+      // 1. Delete any matching sample posts from Firestore
+      try {
+        const blogsRef = collection(db, "blogs");
+        const snapshot = await getDocs(blogsRef);
+        for (const docSnap of snapshot.docs) {
+          const data = docSnap.data();
+          if (isSampleDefaultBlog({ id: docSnap.id, ...data })) {
+            await deleteDoc(doc(db, "blogs", docSnap.id));
+          }
+        }
+      } catch (fsErr) {
+        console.warn("Firestore purge notice:", fsErr);
+      }
+
+      // 2. Remove all sample posts from custom localStorage
+      try {
+        const customBlogs = JSON.parse(
+          localStorage.getItem("daily_news_custom_blogs") || "[]"
+        );
+        const filtered = customBlogs.filter((b) => !isSampleDefaultBlog(b));
+        localStorage.setItem("daily_news_custom_blogs", JSON.stringify(filtered));
+      } catch (lsErr) {}
+
+      // 3. Mark all default IDs and titles as deleted permanently
+      try {
+        const delList = JSON.parse(
+          localStorage.getItem("daily_news_deleted_ids") || "[]"
+        );
+        for (let i = 0; i < 20; i++) {
+          if (!delList.includes(`post-${i}`)) delList.push(`post-${i}`);
+        }
+        localStorage.setItem("daily_news_deleted_ids", JSON.stringify(delList));
+
+        const delTitles = JSON.parse(
+          localStorage.getItem("daily_news_deleted_titles") || "[]"
+        );
+        for (const title of DEFAULT_SAMPLE_TITLES) {
+          if (!delTitles.includes(title)) delTitles.push(title);
+        }
+        localStorage.setItem("daily_news_deleted_titles", JSON.stringify(delTitles));
+      } catch (delErr) {}
+
       await fetchData();
-    } catch (seedErr) {
-      console.error("Error populating sample articles:", seedErr);
-      setError("Failed to populate stories. Check permissions or network.");
+      setSuccessMessage("All default sample stories have been permanently deleted.");
+      setTimeout(() => setSuccessMessage(""), 5000);
+    } catch (err) {
+      console.error("Purge error:", err);
+      setError("Could not complete purge. Please try again.");
     } finally {
-      setIsSeeding(false);
+      setIsPurging(false);
     }
   };
 
@@ -170,7 +217,7 @@ export default function Dashboard() {
         );
       } catch (lsErr) {}
 
-      // 3. Mark in deleted IDs
+      // 3. Mark in deleted IDs and deleted titles
       try {
         const delList = JSON.parse(
           localStorage.getItem("daily_news_deleted_ids") || "[]"
@@ -178,6 +225,20 @@ export default function Dashboard() {
         if (!delList.includes(blogToDelete.id)) {
           delList.push(blogToDelete.id);
           localStorage.setItem("daily_news_deleted_ids", JSON.stringify(delList));
+        }
+
+        const titleKey = (blogToDelete.title || "").toLowerCase().trim();
+        if (titleKey) {
+          const delTitles = JSON.parse(
+            localStorage.getItem("daily_news_deleted_titles") || "[]"
+          );
+          if (!delTitles.includes(titleKey)) {
+            delTitles.push(titleKey);
+            localStorage.setItem(
+              "daily_news_deleted_titles",
+              JSON.stringify(delTitles)
+            );
+          }
         }
       } catch (delErr) {}
 
@@ -278,11 +339,13 @@ export default function Dashboard() {
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={handleSeedDefaults}
-            disabled={isSeeding}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer"
+            onClick={handlePurgeSampleDefaults}
+            disabled={isPurging}
+            title="Permanently remove all default/sample posts from your database and website"
+            className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold px-4 py-2.5 rounded-full text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5"
           >
-            {isSeeding ? "Populating..." : "Seed Sample Articles"}
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>{isPurging ? "Cleaning Up..." : "Purge Default Posts"}</span>
           </button>
           <Link
             to="/dashboard/create"

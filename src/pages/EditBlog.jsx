@@ -59,14 +59,9 @@ export default function EditBlog() {
           }
         }
 
-        // 3. Check DEFAULT_POSTS (for sample/editorial articles)
+        // 3. If not found in Firestore or localStorage, story does not exist
         if (!loadedData) {
-          const sampleMatch = DEFAULT_POSTS.find(
-            (p, idx) =>
-              `post-${idx}` === id ||
-              p.title.toLowerCase().includes(id.toLowerCase())
-          );
-          if (sampleMatch) loadedData = { id, ...sampleMatch };
+          // Do not fallback to sample default posts
         }
 
         if (loadedData) {

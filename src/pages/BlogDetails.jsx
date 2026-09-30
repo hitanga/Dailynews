@@ -65,17 +65,9 @@ export default function BlogDetails() {
           }
         }
 
-        // 3. Fallback to default sample posts
+        // 3. If still not found, story does not exist
         if (!loadedBlog) {
-          const defaultMatch = DEFAULT_POSTS.find(
-            (p, idx) =>
-              `post-${idx}` === id ||
-              p.slug === id ||
-              p.title.toLowerCase().includes(id.toLowerCase())
-          );
-          if (defaultMatch) {
-            loadedBlog = { id, ...defaultMatch };
-          }
+          // Do not fallback to sample default posts
         }
 
         if (loadedBlog) {
