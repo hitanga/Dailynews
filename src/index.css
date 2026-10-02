@@ -124,3 +124,38 @@
 .article-editor-content li {
   margin-bottom: 0.5rem;
 }
+
+/* Explicit font-size and legacy font tag support */
+.article-rendered-content [style*="font-size"],
+.article-editor-content [style*="font-size"] {
+  line-height: 1.6;
+}
+
+.article-rendered-content font[size="1"],
+.article-editor-content font[size="1"] {
+  font-size: 11px;
+}
+.article-rendered-content font[size="2"],
+.article-editor-content font[size="2"] {
+  font-size: 13px;
+}
+.article-rendered-content font[size="3"],
+.article-editor-content font[size="3"] {
+  font-size: 16px;
+}
+.article-rendered-content font[size="4"],
+.article-editor-content font[size="4"] {
+  font-size: 18px;
+}
+.article-rendered-content font[size="5"],
+.article-editor-content font[size="5"] {
+  font-size: 24px;
+}
+.article-rendered-content font[size="6"],
+.article-editor-content font[size="6"] {
+  font-size: 30px;
+}
+.article-rendered-content font[size="7"],
+.article-editor-content font[size="7"] {
+  font-size: 36px;
+}

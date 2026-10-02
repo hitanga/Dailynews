@@ -37,6 +37,22 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
   const [linkUrl, setLinkUrl] = useState("");
   const [linkText, setLinkText] = useState("");
   const [savedSelection, setSavedSelection] = useState(null);
+  const [selectedFontSize, setSelectedFontSize] = useState("16px");
+
+  const FONT_SIZES = [
+    "12px",
+    "13px",
+    "14px",
+    "15px",
+    "16px",
+    "18px",
+    "20px",
+    "22px",
+    "24px",
+    "28px",
+    "32px",
+    "36px",
+  ];
 
   // Initialize and synchronize content
   useEffect(() => {
@@ -116,22 +132,93 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
     setShowColorPicker(false);
   };
 
-  const handleFontSizeChange = (e) => {
-    const format = e.target.value;
-    if (format === "p") {
-      executeCommand("formatBlock", "<p>");
-    } else if (format === "h1") {
-      executeCommand("formatBlock", "<h1>");
-    } else if (format === "h2") {
-      executeCommand("formatBlock", "<h2>");
-    } else if (format === "h3") {
-      executeCommand("formatBlock", "<h3>");
-    } else if (format === "small") {
-      executeCommand("fontSize", "2");
-    } else if (format === "large") {
-      executeCommand("fontSize", "5");
+  const applyExactFontSize = (fontSizePx) => {
+    editorRef.current?.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    if (!sel.isCollapsed) {
+      // 1. Text is highlighted: Wrap selected content and apply explicit inline style
+      try {
+        document.execCommand("styleWithCSS", false, true);
+      } catch (e) {}
+
+      // Use execCommand with a temporary marker size '7'
+      document.execCommand("fontSize", false, "7");
+
+      // Replace all font[size="7"] elements with inline style="font-size: ${fontSizePx}"
+      const fontElements = editorRef.current.querySelectorAll('font[size="7"]');
+      fontElements.forEach((el) => {
+        el.removeAttribute("size");
+        el.style.fontSize = fontSizePx;
+        el.querySelectorAll('[style*="font-size"]').forEach((inner) => {
+          inner.style.fontSize = "";
+        });
+      });
+
+      // Also handle browsers that generate spans for font size
+      const spanElements = editorRef.current.querySelectorAll(
+        'span[style*="-webkit-xxx-large"], span[style*="xxx-large"]'
+      );
+      spanElements.forEach((el) => {
+        el.style.fontSize = fontSizePx;
+        el.querySelectorAll('[style*="font-size"]').forEach((inner) => {
+          inner.style.fontSize = "";
+        });
+      });
+    } else {
+      // 2. Cursor is collapsed: Apply to current paragraph or insert styled span
+      let node = sel.anchorNode;
+      if (node && node.nodeType === Node.TEXT_NODE) {
+        node = node.parentElement;
+      }
+
+      if (node && editorRef.current.contains(node)) {
+        const block = node.closest("p, h1, h2, h3, h4, blockquote, li, div, font, span");
+        if (block && editorRef.current.contains(block) && block !== editorRef.current) {
+          block.style.fontSize = fontSizePx;
+        } else {
+          const span = document.createElement("span");
+          span.style.fontSize = fontSizePx;
+          span.innerHTML = "&#8203;"; // Zero-width space
+          const range = sel.getRangeAt(0);
+          range.insertNode(span);
+          range.selectNodeContents(span);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
     }
-    e.target.value = "";
+
+    setSelectedFontSize(fontSizePx);
+    handleInput();
+  };
+
+  const stepFontSize = (delta) => {
+    const currentIdx = FONT_SIZES.indexOf(selectedFontSize);
+    const validIdx = currentIdx >= 0 ? currentIdx : 4; // default to 16px (index 4)
+    const nextIdx = Math.max(0, Math.min(FONT_SIZES.length - 1, validIdx + delta));
+    const nextSize = FONT_SIZES[nextIdx];
+    applyExactFontSize(nextSize);
+  };
+
+  const updateActiveFontSizeFromSelection = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    let node = sel.anchorNode;
+    if (node && node.nodeType === Node.TEXT_NODE) {
+      node = node.parentElement;
+    }
+    if (node && editorRef.current?.contains(node)) {
+      const computed = window.getComputedStyle(node).fontSize;
+      if (computed) {
+        const rounded = Math.round(parseFloat(computed)) + "px";
+        if (FONT_SIZES.includes(rounded)) {
+          setSelectedFontSize(rounded);
+        }
+      }
+    }
   };
 
   return (
@@ -173,24 +260,69 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
       {/* Formatting Toolbar (Only in Editor tab) */}
       {activeTab === "editor" && (
         <div className="flex flex-wrap items-center gap-1 p-2 bg-white border-b border-gray-200 text-gray-700 select-none">
-          {/* Font Size & Headings Dropdown */}
+          {/* 1. Headings & Block Format Dropdown */}
           <div className="relative inline-block mr-1">
             <select
-              onChange={handleFontSizeChange}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  executeCommand("formatBlock", val);
+                  e.target.value = "";
+                }
+              }}
               defaultValue=""
               className="text-xs font-semibold bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded px-2.5 py-1.5 text-gray-700 cursor-pointer focus:outline-none focus:border-[#f84560]"
-              title="Font Size & Headings"
+              title="Paragraph & Heading Style"
             >
               <option value="" disabled>
-                Font Size / Style
+                Heading / Style
               </option>
-              <option value="p">Normal Paragraph (16px)</option>
-              <option value="h1">Heading 1 (Large Title)</option>
-              <option value="h2">Heading 2 (Section Title)</option>
-              <option value="h3">Heading 3 (Subheading)</option>
-              <option value="large">Large Text</option>
-              <option value="small">Small Text (13px)</option>
+              <option value="<p>">Normal Paragraph</option>
+              <option value="<h1>">Heading 1 (Main Title)</option>
+              <option value="<h2>">Heading 2 (Section Title)</option>
+              <option value="<h3>">Heading 3 (Subheading)</option>
+              <option value="<blockquote>">Quote Block</option>
             </select>
+          </div>
+
+          {/* 2. Exact Font Size Selector */}
+          <div className="flex items-center gap-1 mr-1">
+            <select
+              value={selectedFontSize}
+              onChange={(e) => applyExactFontSize(e.target.value)}
+              className="text-xs font-semibold bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded px-2 py-1.5 text-gray-700 cursor-pointer focus:outline-none focus:border-[#f84560]"
+              title="Font Size (e.g. 13px, 16px)"
+            >
+              <option value="12px">12px (Small)</option>
+              <option value="13px">13px (Compact)</option>
+              <option value="14px">14px</option>
+              <option value="15px">15px</option>
+              <option value="16px">16px (Normal / Default)</option>
+              <option value="18px">18px (Medium)</option>
+              <option value="20px">20px (Large)</option>
+              <option value="22px">22px</option>
+              <option value="24px">24px (Heading)</option>
+              <option value="28px">28px</option>
+              <option value="32px">32px</option>
+              <option value="36px">36px (Display)</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={() => stepFontSize(-1)}
+              className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-xs font-bold text-gray-700 hover:text-[#f84560] transition-colors cursor-pointer"
+              title="Decrease Font Size (A-)"
+            >
+              A-
+            </button>
+            <button
+              type="button"
+              onClick={() => stepFontSize(1)}
+              className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded text-xs font-bold text-gray-700 hover:text-[#f84560] transition-colors cursor-pointer"
+              title="Increase Font Size (A+)"
+            >
+              A+
+            </button>
           </div>
 
           <div className="h-4 w-px bg-gray-200 mx-1" />
@@ -343,6 +475,8 @@ export default function RichTextEditor({ value, onChange, placeholder = "Write y
           contentEditable
           onInput={handleInput}
           onBlur={handleInput}
+          onKeyUp={updateActiveFontSizeFromSelection}
+          onMouseUp={updateActiveFontSizeFromSelection}
           placeholder={placeholder}
           className="min-h-[280px] max-h-[550px] overflow-y-auto p-4 sm:p-5 text-gray-800 text-[15px] sm:text-[16px] leading-relaxed focus:outline-none article-editor-content"
           style={{ whiteSpace: "pre-wrap" }}
