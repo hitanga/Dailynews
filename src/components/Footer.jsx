@@ -68,6 +68,9 @@ export default function Footer() {
           <Link to="/contact" className="hover:text-[#f84560] transition-colors">
             Contact
           </Link>
+          <Link to="/privacy-policy" className="hover:text-[#f84560] transition-colors">
+            Privacy Policy
+          </Link>
           {isAdmin && (
             <Link to="/dashboard" className="text-[#f84560] hover:text-white transition-colors">
               Editorial Dashboard
